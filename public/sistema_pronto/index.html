@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Leads - Sistema Infinito de Prospecção</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <link rel="stylesheet" href="style.css" />
+
+</head>
+
+<body>
+
+    <div class="license-overlay" id="licenseOverlay">
+        <div class="license-card">
+            <div class="text-center mb-4">
+                <div class="gradient-bg-infinite text-white rounded-3 p-3 mb-3 d-inline-block pulse-animation">
+                    <i class="bi bi-shield-lock-fill fs-1"></i>
+                </div>
+                <h2 class="fw-bold gradient-text">Acesso ao Sistema</h2>
+                <p class="text-muted">Informe seu e-mail de compra para validar sua licença.</p>
+            </div>
+
+            <form id="licenseForm" onsubmit="handleLicenseSubmit(event)">
+                <div class="mb-4">
+                    <label for="licenseEmail" class="form-label fw-semibold">E-mail de Compra</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="bi bi-envelope"></i>
+                        </span>
+                        <input type="email" class="form-control" id="licenseEmail" placeholder="seu@email.com" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100 mb-3" id="licenseBtn">
+                    <span class="license-loading spinner-border spinner-border-sm me-2"></span>
+                    <span id="licenseBtnText">
+                        <i class="bi bi-check-circle me-2"></i>Validar Acesso
+                    </span>
+                </button>
+
+                <div class="alert alert-danger d-none" id="licenseError" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <span id="licenseErrorText">e-mail não autorizado</span>
+                </div>
+            </form>
+
+            <div class="text-center mt-4">
+                <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Acesso restrito a compradores autorizados
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-card">
+            <div class="text-center mb-4">
+                <div class="gradient-bg-infinite text-white rounded-3 p-3 mb-3 d-inline-block pulse-animation">
+                    <i class="bi bi-infinity fs-1"></i>
+                </div>
+                <h2 class="fw-bold gradient-text">Infinite Leads</h2>
+                <p class="text-muted">Sistema Infinito de Prospecção</p>
+            </div>
+
+            <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
+                <div class="mb-3">
+                    <label for="email" class="form-label fw-semibold">E-mail</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="bi bi-envelope"></i>
+                        </span>
+                        <input type="email" class="form-control" id="email" placeholder="seu@email.com" required>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label fw-semibold">Senha</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="bi bi-lock"></i>
+                        </span>
+                        <input type="password" class="form-control" id="password" placeholder="Sua senha" required>
+                        <button class="btn btn-outline-secondary" type="button" onclick="toggleLoginPassword()">
+                            <i class="bi bi-eye" id="passwordToggleIcon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100 mb-3" id="loginBtn">
+                    <span class="login-loading spinner-border spinner-border-sm me-2"></span>
+                    <span id="loginBtnText">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
+                    </span>
+                </button>
+
+                <div class="alert alert-danger d-none" id="loginError" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <span id="loginErrorText">Erro no login</span>
+                </div>
+            </form>
+
+            <div class="text-center mt-4">
+                <small class="text-muted">
+                    <i class="bi bi-shield-check me-1"></i>
+                    Acesso seguro e protegido
+                </small>
+            </div>
+        </div>
+    </div>
+    <div class="main-content" id="mainContent">
+        <!-- Header -->
+        <nav class="navbar navbar-expand-lg bg-body-tertiary shadow-sm">
+            <div class="container-fluid">
+                <div class="navbar-brand d-flex align-items-center">
+                    <div class="gradient-bg-infinite text-white rounded-3 p-2 me-3">
+                        <i class="bi bi-infinity fs-5"></i>
+                    </div>
+                    <span class="fs-3 fw-bold gradient-text">Infinite Leads</span>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-secondary" onclick="toggleTheme()" id="theme-toggle">
+                        <i class="bi bi-moon" id="theme-icon"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="showConfigModal()">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="logout()" title="Sair">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container-fluid py-4">
+            <!-- Hero Section -->
+            <div class="hero-section p-4 text-center">
+                <h1 class="display-5 fw-bold mb-3">
+                    <i class="bi bi-infinity me-3"></i>Prospecção Infinita
+                </h1>
+                <p class="lead mb-0">Busque empresas, perfis sociais, valide WhatsApp e exporte tudo em Excel</p>
+            </div>
+
+            <div class="row g-4">
+                <!-- Coluna Principal: Busca e Resultados -->
+                <div class="col-lg-8">
+                    <!-- Search Type Selection -->
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-search me-2"></i>Tipo de Prospecção
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card search-type-card h-100" id="empresas-card"
+                                        onclick="selectSearchType('empresas')">
+                                        <div class="card-body text-center">
+                                            <div class="maps-gradient text-white rounded-3 p-3 mb-3 d-inline-block">
+                                                <i class="bi bi-building fs-2"></i>
+                                            </div>
+                                            <h5 class="card-title">Buscar Empresas</h5>
+                                            <p class="card-text">Encontre empresas locais com validação de WhatsApp</p>
+                                            <div class="platform-example">
+                                                <strong>Exemplo:</strong> "Petshop em Salvador"
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card search-type-card h-100" id="social-card"
+                                        onclick="selectSearchType('social')">
+                                        <div class="card-body text-center">
+                                            <div class="gradient-bg text-white rounded-3 p-3 mb-3 d-inline-block">
+                                                <i class="bi bi-people fs-2"></i>
+                                            </div>
+                                            <h5 class="card-title">Buscar Perfis Sociais</h5>
+                                            <p class="card-text">Encontre perfis no LinkedIn e Instagram</p>
+                                            <div class="platform-example">
+                                                <strong>Exemplo:</strong> "CEO Clínica Médica"
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Social Platform Selection (Hidden by default) -->
+                    <div class="card shadow-sm mb-4 search-mode-section d-none" id="social-platform-section">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-layers me-2"></i>Escolha a Plataforma Social
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card platform-card h-100" id="linkedin-card"
+                                        onclick="selectPlatform('linkedin')">
+                                        <div class="card-body text-center">
+                                            <div class="linkedin-gradient text-white rounded-3 p-3 mb-3 d-inline-block">
+                                                <i class="bi bi-linkedin fs-2"></i>
+                                            </div>
+                                            <h5 class="card-title">LinkedIn</h5>
+                                            <p class="card-text">Encontre profissionais por cargo e área</p>
+                                            <div class="platform-example">
+                                                <strong>Exemplo:</strong> "CEO Clínica Médica"
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card platform-card h-100" id="instagram-card"
+                                        onclick="selectPlatform('instagram')">
+                                        <div class="card-body text-center">
+                                            <div
+                                                class="instagram-gradient text-white rounded-3 p-3 mb-3 d-inline-block">
+                                                <i class="bi bi-instagram fs-2"></i>
+                                            </div>
+                                            <h5 class="card-title">Instagram</h5>
+                                            <p class="card-text">Encontre empresas e negócios</p>
+                                            <div class="platform-example">
+                                                <strong>Exemplo:</strong> "Clínica Médica"
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search Section -->
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header search-header">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-search me-2"></i>Buscar Leads
+                                        <span class="badge bg-primary ms-2" id="search-mode-badge">Selecione o tipo de
+                                            busca</span>
+                                    </h5>
+                                </div>
+                                <div class="col-auto">
+                                    <span class="badge bg-primary" id="results-count">0 resultados encontrados</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Search Form -->
+                            <div class="row g-3 mb-4" id="search-form-container">
+                                <div class="col-md-9">
+                                    <div class="input-group input-group-lg">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-search"></i>
+                                        </span>
+                                        <input type="text" class="form-control" id="search-input"
+                                            placeholder="Selecione o tipo de busca primeiro..."
+                                            onkeypress="handleEnterKey(event)" disabled>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-lg gradient-bg text-white w-100" onclick="searchLeads()"
+                                        id="search-btn" disabled>
+                                        <span class="loading-spinner spinner-border spinner-border-sm me-2"></span>
+                                        <span id="search-btn-text">
+                                            <i class="bi bi-search me-2"></i>Buscar
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Search Examples -->
+                            <div class="alert alert-info d-none" id="search-examples">
+                                <i class="bi bi-lightbulb me-2"></i>
+                                <span id="examples-text"></span>
+                            </div>
+
+                            <!-- Pagination Controls -->
+                            <div class="pagination-controls d-none" id="pagination-controls">
+                                <div class="row align-items-center">
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="loadPreviousPage()"
+                                                id="prev-btn" disabled>
+                                                <i class="bi bi-chevron-left"></i> Anterior
+                                            </button>
+                                            <span class="badge bg-light text-dark" id="page-info">Página 1</span>
+                                            <button class="btn btn-outline-primary btn-sm" onclick="loadNextPage()"
+                                                id="next-btn">
+                                                Próxima <i class="bi bi-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-md-end">
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Mostrando <span id="showing-range">1-20</span> de <span
+                                                id="total-available">20+</span> resultados disponíveis
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Filters -->
+                            <div class="row g-2 mb-4" id="filters-section">
+                                <div class="col-auto">
+                                    <select class="form-select form-select-sm" id="whatsapp-filter"
+                                        onchange="applyFilters()">
+                                        <option value="">Todos</option>
+                                        <option value="true">Apenas com WhatsApp</option>
+                                        <option value="false">Sem WhatsApp</option>
+                                    </select>
+                                </div>
+                                <div class="col-auto" id="rating-filter-container">
+                                    <select class="form-select form-select-sm" id="rating-filter"
+                                        onchange="applyFilters()">
+                                        <option value="">Todas as avaliações</option>
+                                        <option value="4">4+ estrelas</option>
+                                        <option value="3">3+ estrelas</option>
+                                    </select>
+                                </div>
+                                <div class="col-auto">
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="clearFilters()">
+                                        <i class="bi bi-x-circle me-1"></i>Limpar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Filter Status -->
+                            <div class="filter-status d-none" id="filter-status">
+                                <small><i class="bi bi-funnel me-1"></i><span id="filter-description"></span></small>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="selectAll()">
+                                        <i class="bi bi-check-all me-1"></i>Selecionar Página
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+                                        <i class="bi bi-x-square me-1"></i>Limpar Página
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" onclick="clearAllSelections()">
+                                        <i class="bi bi-trash me-1"></i>Limpar Tudo
+                                    </button>
+                                </div>
+                                <span class="text-muted">
+                                    <strong id="selected-count">0</strong> selecionados
+                                    <small class="text-muted">(total)</small>
+                                </span>
+                            </div>
+
+                            <!-- Results List -->
+                            <div class="row g-2" id="results-container">
+                                <!-- Results will be loaded here -->
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5 d-none" id="empty-state">
+                                <i class="bi bi-search fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">Nenhum resultado encontrado</h5>
+                                <p class="text-muted" id="empty-state-message">Selecione o tipo de busca e faça sua
+                                    pesquisa
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar: Estatísticas e Exportação -->
+                <div class="col-lg-4">
+                    <!-- Mini Map (only for empresas) -->
+                    <div class="card shadow-sm mb-4 d-none" id="map-section">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="card-title mb-0">
+                                    <i class="bi bi-geo-alt me-2"></i>Mapa dos Leads
+                                </h6>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="centerMapOnResults()"
+                                        title="Centralizar no resultado">
+                                        <i class="bi bi-crosshair"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleMapView()"
+                                        title="Alternar vista">
+                                        <i class="bi bi-layers" id="map-view-icon"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="minimap"></div>
+                        </div>
+                    </div>
+
+                    <!-- Statistics -->
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="bi bi-bar-chart me-2"></i>Estatísticas da Página
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3" id="stats-container">
+                                <!-- Stats will be populated based on search type -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Export Section -->
+                    <div class="export-section p-4">
+                        <div class="text-center mb-3">
+                            <i class="bi bi-file-earmark-excel fs-1 text-success"></i>
+                            <h5 class="mt-2">Exportar Dados</h5>
+                            <p class="text-muted mb-0">Gere um arquivo Excel com os leads selecionados</p>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <div class="row g-2">
+                                <div class="col-12">
+                                    <button class="btn btn-success btn-lg w-100 export-btn" onclick="exportToExcel()"
+                                        id="export-btn" disabled>
+                                        <i class="bi bi-download me-2"></i>
+                                        Exportar <span id="export-count">0</span> Selecionados
+                                    </button>
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-outline-success btn-lg w-100" onclick="exportAll()"
+                                        id="export-all-btn" disabled>
+                                        <i class="bi bi-file-earmark-spreadsheet me-2"></i>
+                                        Exportar Todos (<span id="export-all-count">0</span>)
+                                    </button>
+                                </div>
+                                <!-- <div class="col-12" id="disparador-export-container">
+                                <button class="btn btn-warning btn-lg w-100" onclick="exportDisparadorPro()"
+                                    id="export-disparador-btn" disabled>
+                                    <i class="bi bi-send me-2"></i>
+                                    Disparador PRO (<span id="export-disparador-count">0</span>)
+                                </button>
+                            </div> -->
+                            </div>
+                        </div>
+
+                        <div class="mt-3 p-3 bg-light bg-opacity-50 rounded">
+                            <small class="text-muted" id="export-info">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <strong>Dados inclusos:</strong> Nome, Endereço, Telefone, E-mail, Rating, Website,
+                                Status
+                                WhatsApp
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Configuration Modal -->
+    <div class="modal fade" id="configModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-gear me-2"></i>Configurações das APIs
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-search me-2"></i>Configuração Serper.dev (Empresas e Perfis Sociais)
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">
+                                    API Keys Serper.dev
+                                    <span class="badge bg-info">Rodízio Automático</span>
+                                </label>
+                                <div id="serper-keys-container">
+                                    <div class="serper-key-input mb-2" data-key-index="1">
+                                        <div class="input-group">
+                                            <span class="input-group-text">Key 1</span>
+                                            <input type="password" class="form-control serper-key-field"
+                                                id="serper-key-1" placeholder="Sua chave do Serper.dev"
+                                                data-key-index="1">
+                                            <button class="btn btn-outline-secondary" type="button"
+                                                onclick="togglePasswordVisibility('serper-key-1')">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mt-2"
+                                    onclick="addSerperKeyInput()">
+                                    <i class="bi bi-plus-circle me-1"></i>Adicionar API Key
+                                </button>
+                                <div class="form-text mt-2">
+                                    Obtenha suas chaves em: <a href="https://serper.dev" target="_blank">serper.dev</a>
+                                    <br><small class="text-muted">Adicione até 5 API keys para rodízio
+                                        automático</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-search me-2"></i>Configuração Serper.dev (Empresas e Perfis Sociais)
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">API Key Serper.dev</label>
+                                <input type="password" class="form-control" id="serper-key"
+                                    placeholder="Sua chave do Serper.dev">
+                                <div class="form-text">
+                                    Obtenha sua chave em: <a href="https://serper.dev" target="_blank">serper.dev</a>
+                                    <br><small class="text-muted">Esta API será usada tanto para buscar empresas quanto
+                                        perfis sociais</small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="togglePasswordVisibility('serper-key')">
+                                <i class="bi bi-eye"></i> Mostrar/Ocultar Chave
+                            </button>
+                        </div>
+                    </div> -->
+
+                    <!-- Serper Maps Configuration -->
+                    <!-- <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-building me-2"></i>Configuração Serper Maps (Empresas)
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">API Key Serper Maps</label>
+                                <input type="password" class="form-control" id="serper-maps-key"
+                                    placeholder="Sua chave do Serper.dev">
+                                <div class="form-text">
+                                    Obtenha sua chave em: <a href="https://serper.dev" target="_blank">serper.dev</a>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="togglePasswordVisibility('serper-maps-key')">
+                                <i class="bi bi-eye"></i> Mostrar/Ocultar Chave
+                            </button>
+                        </div>
+                    </div> -->
+
+                    <!-- Serper Search Configuration -->
+                    <!-- <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-people me-2"></i>Configuração Serper Search (Perfis Sociais)
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">API Key Serper Search</label>
+                                <input type="password" class="form-control" id="serper-key"
+                                    placeholder="Sua chave do Serper.dev">
+                                <div class="form-text">
+                                    Obtenha sua chave em: <a href="https://serper.dev" target="_blank">serper.dev</a>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="togglePasswordVisibility('serper-key')">
+                                <i class="bi bi-eye"></i> Mostrar/Ocultar Chave
+                            </button>
+                        </div>
+                    </div> -->
+
+                    <!-- WhatsApp API Configuration -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-whatsapp me-2"></i>Configuração WhatsApp API
+                                <span class="badge bg-secondary ms-2">Opcional</span>
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>Configuração opcional:</strong> Sem a Evolution API, os números de WhatsApp
+                                aparecerão como "Não Verificado".
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">URL Base da API WhatsApp</label>
+                                <input type="text" class="form-control" id="whatsapp-base-url"
+                                    placeholder="https://evolutionapi.seudominio.com.br">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Nome da Instância</label>
+                                <input type="text" class="form-control" id="whatsapp-instance"
+                                    placeholder="Nome da Instância">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">API Key / Token</label>
+                                <input type="password" class="form-control" id="whatsapp-api-key"
+                                    placeholder="Seu token de autenticação">
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm mb-3"
+                                onclick="togglePasswordVisibility('whatsapp-api-key')">
+                                <i class="bi bi-eye"></i> Mostrar/Ocultar Token
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Test APIs -->
+                    <!-- <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-check-circle me-2"></i>Testar Configurações
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <button type="button" class="btn btn-outline-success w-100"
+                                        onclick="testSerperMapsAPI()">
+                                        <i class="bi bi-building me-1"></i>Testar Serper Maps
+                                    </button>
+                                </div>
+                                <div class="col-4">
+                                    <button type="button" class="btn btn-outline-success w-100"
+                                        onclick="testSerperAPI()">
+                                        <i class="bi bi-people me-1"></i>Testar Serper Search
+                                    </button>
+                                </div>
+                                <div class="col-4">
+                                    <button type="button" class="btn btn-outline-success w-100"
+                                        onclick="testWhatsAppAPI()">
+                                        <i class="bi bi-whatsapp me-1"></i>Testar WhatsApp
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div> -->
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-check-circle me-2"></i>Testar Configurações
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <!-- <div class="col-6">
+                                    <button type="button" class="btn btn-outline-success w-100"
+                                        onclick="testSerperAPI()">
+                                        <i class="bi bi-search me-1"></i>Testar Serper.dev
+                                    </button>
+                                </div> -->
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-outline-info w-100"
+                                        onclick="testAllSerperKeys()">
+                                        <i class="bi bi-check2-all me-1"></i>Testar Todas Keys
+                                    </button>
+                                </div>
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-outline-success w-100"
+                                        onclick="testWhatsAppAPI()">
+                                        <i class="bi bi-whatsapp me-1"></i>Testar WhatsApp
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAllConfigs()">
+                        <i class="bi bi-check me-1"></i>Salvar Todas
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="main.js?v=1245"></script>
+</body>
+
+</html>

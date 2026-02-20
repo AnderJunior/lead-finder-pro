@@ -1,0 +1,297 @@
+/* Custom styles */
+.gradient-text {
+    background: linear-gradient(135deg, #0d6efd, #6f42c1, #dc3545);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.gradient-bg {
+    background: linear-gradient(135deg, #0d6efd, #6f42c1);
+    width: 100px;
+}
+
+.gradient-bg-infinite {
+    background: linear-gradient(135deg, #0d6efd, #6f42c1, #dc3545, #198754);
+    background-size: 400% 400%;
+    animation: gradientShift 8s ease infinite;
+    text-align: center;
+}
+
+@keyframes gradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.search-type-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+
+.search-type-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.search-type-card.active {
+    border-color: #0d6efd !important;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.platform-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+
+.platform-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.platform-card.active {
+    border-color: #0d6efd !important;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.prospect-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.prospect-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.prospect-card.selected {
+    border: 2px solid #0d6efd !important;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.stats-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    transition: all 0.3s ease;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+[data-bs-theme="dark"] .stats-card {
+    background: linear-gradient(135deg, #212529, #495057);
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.export-section {
+    background: linear-gradient(135deg, rgba(25, 135, 84, 0.1), rgba(13, 110, 253, 0.1));
+    border-radius: 15px;
+    border: 2px dashed #198754;
+}
+
+.search-header {
+    background: linear-gradient(135deg, rgba(13, 110, 253, 0.1), rgba(111, 66, 193, 0.1));
+    border-radius: 15px;
+}
+
+.loading-spinner {
+    display: none;
+}
+
+.hero-section {
+    background: linear-gradient(135deg, #0d6efd, #6f42c1, #dc3545);
+    color: white;
+    border-radius: 20px;
+    margin-bottom: 2rem;
+    background-size: 400% 400%;
+    animation: gradientShift 10s ease infinite;
+}
+
+.pagination-controls {
+    background: linear-gradient(135deg, rgba(13, 110, 253, 0.05), rgba(111, 66, 193, 0.05));
+    border-radius: 10px;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.filter-status {
+    background: rgba(13, 110, 253, 0.1);
+    border: 1px solid rgba(13, 110, 253, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+.whatsapp-status {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 12px;
+}
+
+.rating-stars {
+    color: #ffc107;
+}
+
+.export-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.linkedin-gradient {
+    background: linear-gradient(135deg, #0077b5, #004182);
+    width: 100px;
+}
+
+.instagram-gradient {
+    background: linear-gradient(135deg, #e4405f, #833ab4);
+    width: 100px;
+}
+
+.maps-gradient {
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    width: 100px;
+}
+
+#minimap {
+    height: 300px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.platform-example {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.search-mode-section {
+    transition: all 0.3s ease;
+}
+
+.login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #0d6efd, #6f42c1, #dc3545);
+    background-size: 400% 400%;
+    animation: gradientShift 8s ease infinite;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    width: 100%;
+    max-width: 500px;
+    backdrop-filter: blur(10px);
+}
+
+[data-bs-theme="dark"] .login-card {
+    background: rgba(33, 37, 41, 0.95);
+    color: white;
+}
+
+.main-content {
+    display: none;
+}
+
+.main-content.authenticated {
+    display: block;
+}
+
+.login-form .form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.login-loading {
+    display: none;
+}
+
+.pulse-animation {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* License Overlay */
+.license-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #0d6efd, #6f42c1, #dc3545);
+    background-size: 400% 400%;
+    animation: gradientShift 8s ease infinite;
+    z-index: 10000; /* Higher than login overlay */
+    display: none; /* Controlled by JS */
+    align-items: center;
+    justify-content: center;
+}
+
+.license-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 450px;
+    backdrop-filter: blur(10px);
+    text-align: center;
+}
+
+[data-bs-theme="dark"] .license-card {
+    background: rgba(33, 37, 41, 0.95);
+    color: white;
+}
+
+.license-loading {
+    display: none;
+}

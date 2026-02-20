@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 export type LeadStatus = "novo" | "contatado" | "qualificado" | "descartado";
@@ -14,6 +15,11 @@ export interface Lead {
   reviews: number;
   status: LeadStatus;
   tags: string[];
+}
+
+export interface LeadWithWhatsApp extends Lead {
+  hasWhatsApp?: boolean | null;
+  whatsappStatus?: string;
 }
 
 const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
@@ -36,19 +42,50 @@ export const mockLeads: Lead[] = [
 
 interface LeadsTableProps {
   leads?: Lead[];
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onSelectAll?: () => void;
+  onClearSelection?: () => void;
+  showWhatsApp?: boolean;
 }
 
-export function LeadsTable({ leads = mockLeads }: LeadsTableProps) {
+export function LeadsTable({
+  leads = mockLeads,
+  selectable = false,
+  selectedIds = new Set(),
+  onToggleSelect,
+  onSelectAll,
+  onClearSelection,
+  showWhatsApp = false,
+}: LeadsTableProps) {
   return (
     <div className="card-gradient rounded-xl border border-border overflow-hidden animate-fade-in">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
+              {selectable && (
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-10">
+                  <Checkbox
+                    checked={
+                      leads.length > 0 &&
+                      leads.every((l) => selectedIds.has(l.id))
+                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) onSelectAll?.();
+                      else onClearSelection?.();
+                    }}
+                  />
+                </th>
+              )}
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Empresa</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categoria</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Telefone</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avaliação</th>
+              {showWhatsApp && (
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">WhatsApp</th>
+              )}
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
             </tr>
@@ -56,24 +93,87 @@ export function LeadsTable({ leads = mockLeads }: LeadsTableProps) {
           <tbody>
             {leads.map((lead, i) => {
               const sc = statusConfig[lead.status];
+              const ext = lead as LeadWithWhatsApp;
+              const isSelected = selectedIds.has(lead.id);
               return (
                 <tr
                   key={lead.id}
-                  className="border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer"
+                  className={cn(
+                    "border-b border-border/50 hover:bg-muted/50 transition-colors",
+                    selectable && "cursor-pointer",
+                    isSelected && "bg-primary/5"
+                  )}
                   style={{ animationDelay: `${i * 50}ms` }}
+                  onClick={
+                    selectable && onToggleSelect
+                      ? () => onToggleSelect(lead.id)
+                      : undefined
+                  }
                 >
+                  {selectable && (
+                    <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => onToggleSelect?.(lead.id)}
+                      />
+                    </td>
+                  )}
                   <td className="px-5 py-4">
                     <p className="font-medium text-sm text-foreground">{lead.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{lead.address}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{lead.address || "—"}</p>
+                    {lead.website && (
+                      <a
+                        href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary hover:underline mt-0.5 inline-block"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {lead.website}
+                      </a>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-sm text-secondary-foreground">{lead.category}</td>
-                  <td className="px-5 py-4 text-sm text-secondary-foreground font-mono">{lead.phone}</td>
+                  <td className="px-5 py-4 text-sm text-secondary-foreground font-mono">
+                    <span>{lead.phone || "—"}</span>
+                    {showWhatsApp && ext.hasWhatsApp === true && lead.phone && (
+                      <a
+                        href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-2 text-green-600 hover:underline inline-flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Abrir WhatsApp"
+                      >
+                        📱
+                      </a>
+                    )}
+                  </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold text-warning">★ {lead.rating}</span>
-                      <span className="text-xs text-muted-foreground">({lead.reviews})</span>
+                      <span className="text-sm font-semibold text-warning">★ {lead.rating ?? 0}</span>
+                      <span className="text-xs text-muted-foreground">({lead.reviews ?? 0})</span>
                     </div>
                   </td>
+                  {showWhatsApp && (
+                    <td className="px-5 py-4">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs font-medium",
+                          ext.hasWhatsApp === true && "bg-green-500/15 text-green-700 border-green-500/30",
+                          ext.hasWhatsApp === false && "bg-red-500/15 text-red-700 border-red-500/30",
+                          (ext.hasWhatsApp == null || ext.hasWhatsApp === undefined) && "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {ext.hasWhatsApp === true
+                          ? "Sim"
+                          : ext.hasWhatsApp === false
+                            ? "Não"
+                            : "Não Verificado"}
+                      </Badge>
+                    </td>
+                  )}
                   <td className="px-5 py-4">
                     <Badge variant="outline" className={cn("text-xs font-medium border", sc.className)}>
                       {sc.label}
@@ -86,6 +186,9 @@ export function LeadsTable({ leads = mockLeads }: LeadsTableProps) {
                           {tag}
                         </Badge>
                       ))}
+                      {(!lead.tags || lead.tags.length === 0) && (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </div>
                   </td>
                 </tr>

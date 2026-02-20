@@ -1,23 +1,29 @@
-import { Search, MapPin, Loader2 } from "lucide-react";
+import { Search, MapPin } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
+import { MapPreview } from "@/components/MapPreview";
+import { useJsApiLoader } from "@react-google-maps/api";
+
+const mapApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 export function SearchForm() {
   const [term, setTerm] = useState("");
   const [location, setLocation] = useState("");
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const { isLoaded: isMapsLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: mapApiKey,
+  });
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!term.trim() || !location.trim()) return;
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      navigate(`/leads?q=${encodeURIComponent(term)}&loc=${encodeURIComponent(location)}`);
-    }, 800);
+    navigate(
+      `/search?q=${encodeURIComponent(term.trim())}&loc=${encodeURIComponent(location.trim())}`
+    );
   };
 
   return (
@@ -44,9 +50,13 @@ export function SearchForm() {
             className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground"
           />
         </div>
-        <Button type="submit" disabled={loading || !term.trim() || !location.trim()} className="px-8">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buscar"}
+        <Button type="submit" disabled={!term.trim() || !location.trim() || !isMapsLoaded} className="px-8">
+          {!isMapsLoaded ? "Carregando..." : "Buscar"}
         </Button>
+      </div>
+
+      <div className="mt-5 rounded-lg overflow-hidden border border-border h-[320px] min-h-[320px]">
+        <MapPreview className="h-full w-full" />
       </div>
     </form>
   );
