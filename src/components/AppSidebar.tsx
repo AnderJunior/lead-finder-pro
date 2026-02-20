@@ -1,4 +1,4 @@
-import { Search, LayoutDashboard, Users, Settings, MapPin, Download, BarChart3, Zap } from "lucide-react";
+import { Search, LayoutDashboard, Users, MapPin, Download } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -7,8 +7,6 @@ const navItems = [
   { icon: Search, label: "Nova Busca", path: "/search" },
   { icon: Users, label: "Meus Leads", path: "/leads" },
   { icon: Download, label: "Exportações", path: "/exports" },
-  { icon: BarChart3, label: "Relatórios", path: "/reports" },
-  { icon: Settings, label: "Configurações", path: "/settings" },
 ];
 
 export function AppSidebar() {
@@ -45,21 +43,6 @@ export function AppSidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Credits */}
-      <div className="mx-3 mb-4 rounded-lg border border-border bg-muted p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Zap className="h-4 w-4 text-warning" />
-          <span className="text-xs font-semibold text-foreground">Créditos</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-bold text-foreground">847</span>
-          <span className="text-xs text-muted-foreground">/ 1.000</span>
-        </div>
-        <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
-          <div className="h-full w-[85%] rounded-full bg-primary" />
-        </div>
-      </div>
     </aside>
   );
 }
