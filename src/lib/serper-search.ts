@@ -3,6 +3,8 @@
  * Suporta paginação real (carregar página a página)
  */
 
+import { getIntegracoesConfig } from "./integracoes-config";
+
 const SERPER_BASE = "https://google.serper.dev";
 const CORS_PROXIES = [
   "https://api.codetabs.com/v1/proxy?quest=",
@@ -32,15 +34,17 @@ export interface SerperMapsResponse {
   hasMore: boolean;
 }
 
-function getApiKey(): string {
-  const key = import.meta.env.VITE_SERPER_API_KEY;
-  if (!key) throw new Error("Configure VITE_SERPER_API_KEY no .env");
+async function getApiKey(): Promise<string> {
+  const config = await getIntegracoesConfig();
+  const key = config.serper_api_key;
+  if (!key) throw new Error("Configure a chave da Serper API nas configurações do sistema.");
   return key;
 }
 
 async function fetchWithCors(
   url: string,
-  options: RequestInit
+  options: RequestInit,
+  apiKey: string
 ): Promise<Response> {
   try {
     const res = await fetch(url, options);
@@ -51,7 +55,7 @@ async function fetchWithCors(
   const proxy = CORS_PROXIES[0];
   return fetch(`${proxy}${encodeURIComponent(url)}`, {
     ...options,
-    headers: { ...options.headers, "X-API-KEY": getApiKey() },
+    headers: { ...options.headers, "X-API-KEY": apiKey },
   });
 }
 
@@ -60,13 +64,13 @@ export async function searchSerperMaps(
   page: number = 1,
   coordinates?: string
 ): Promise<SerperMapsResponse> {
-  const apiKey = getApiKey();
+  const apiKey = await getApiKey();
   const body: Record<string, unknown> = {
     q: query.trim(),
     hl: "pt-br",
     page,
   };
-  if (page > 1 && coordinates) {
+  if (coordinates) {
     body.ll = coordinates;
   }
 
@@ -78,7 +82,7 @@ export async function searchSerperMaps(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-  });
+  }, apiKey);
 
   if (!res.ok) {
     const text = await res.text();

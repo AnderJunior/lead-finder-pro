@@ -38,7 +38,7 @@ declare global {
 
 async function getPlacesLibrary(): Promise<google.maps.PlacesLibrary> {
   if (!window.google?.maps?.importLibrary) {
-    throw new Error("Google Maps API não carregada. Verifique VITE_GOOGLE_MAPS_API_KEY.");
+    throw new Error("Google Maps API não carregada. Verifique a configuração em Configurações > Integrações.");
   }
   return (await window.google.maps.importLibrary("places")) as google.maps.PlacesLibrary;
 }

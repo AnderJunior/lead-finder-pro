@@ -40,8 +40,12 @@ export const mockLeads: Lead[] = [
   { id: "8", name: "Studio Pilates Corpo & Mente", category: "Pilates", address: "Rua Haddock Lobo, 600 - São Paulo, SP", phone: "(11) 8765-4321", website: "corpoemente.com.br", rating: 4.9, reviews: 287, status: "qualificado", tags: ["saúde", "fitness"] },
 ];
 
+export interface LeadComCaptado extends Lead {
+  jaCaptado?: boolean;
+}
+
 interface LeadsTableProps {
-  leads?: Lead[];
+  leads?: (Lead | LeadComCaptado)[];
   selectable?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
@@ -69,8 +73,8 @@ export function LeadsTable({
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-10">
                   <Checkbox
                     checked={
-                      leads.length > 0 &&
-                      leads.every((l) => selectedIds.has(l.id))
+                      leads.filter((l) => !(l as LeadComCaptado).jaCaptado).length > 0 &&
+                      leads.filter((l) => !(l as LeadComCaptado).jaCaptado).every((l) => selectedIds.has(l.id))
                     }
                     onCheckedChange={(checked) => {
                       if (checked) onSelectAll?.();
@@ -79,33 +83,35 @@ export function LeadsTable({
                   />
                 </th>
               )}
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Empresa</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categoria</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider max-w-[280px]">Empresa</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Telefone</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avaliação</th>
               {showWhatsApp && (
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">WhatsApp</th>
               )}
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
             </tr>
           </thead>
           <tbody>
             {leads.map((lead, i) => {
-              const sc = statusConfig[lead.status];
               const ext = lead as LeadWithWhatsApp;
+              const captado = (lead as LeadComCaptado).jaCaptado === true;
               const isSelected = selectedIds.has(lead.id);
               return (
                 <tr
                   key={lead.id}
                   className={cn(
-                    "border-b border-border/50 hover:bg-muted/50 transition-colors",
-                    selectable && "cursor-pointer",
-                    isSelected && "bg-primary/5"
+                    "border-b border-border/50 transition-colors",
+                    captado
+                      ? "opacity-50 cursor-not-allowed bg-muted/30"
+                      : cn(
+                          "hover:bg-muted/50",
+                          selectable && "cursor-pointer",
+                          isSelected && "bg-primary/5"
+                        )
                   )}
                   style={{ animationDelay: `${i * 50}ms` }}
                   onClick={
-                    selectable && onToggleSelect
+                    selectable && onToggleSelect && !captado
                       ? () => onToggleSelect(lead.id)
                       : undefined
                   }
@@ -114,43 +120,40 @@ export function LeadsTable({
                     <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={() => onToggleSelect?.(lead.id)}
+                        disabled={captado}
+                        onCheckedChange={() => !captado && onToggleSelect?.(lead.id)}
                       />
                     </td>
                   )}
-                  <td className="px-5 py-4">
-                    <p className="font-medium text-sm text-foreground">{lead.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{lead.address || "—"}</p>
-                    {lead.website && (
-                      <a
-                        href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-primary hover:underline mt-0.5 inline-block"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {lead.website}
-                      </a>
-                    )}
+                  <td className="px-5 py-4 max-w-[280px]">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("min-w-0", captado && "line-through")}>
+                        <p className="font-medium text-sm text-foreground truncate">{lead.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{lead.address || "—"}</p>
+                        {lead.website && (
+                          <a
+                            href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary hover:underline mt-0.5 block truncate"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {lead.website}
+                          </a>
+                        )}
+                      </div>
+                      {captado && (
+                        <Badge variant="outline" className="text-xs bg-emerald-500/15 text-emerald-700 border-emerald-500/30 whitespace-nowrap shrink-0">
+                          Já captado
+                        </Badge>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-5 py-4 text-sm text-secondary-foreground">{lead.category}</td>
-                  <td className="px-5 py-4 text-sm text-secondary-foreground font-mono">
+                  <td className={cn("px-5 py-4 text-sm text-secondary-foreground font-mono", captado && "line-through")}>
                     <span>{lead.phone || "—"}</span>
-                    {showWhatsApp && ext.hasWhatsApp === true && lead.phone && (
-                      <a
-                        href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="ml-2 text-green-600 hover:underline inline-flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Abrir WhatsApp"
-                      >
-                        📱
-                      </a>
-                    )}
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-col items-center">
                       <span className="text-sm font-semibold text-warning">★ {lead.rating ?? 0}</span>
                       <span className="text-xs text-muted-foreground">({lead.reviews ?? 0})</span>
                     </div>
@@ -174,23 +177,6 @@ export function LeadsTable({
                       </Badge>
                     </td>
                   )}
-                  <td className="px-5 py-4">
-                    <Badge variant="outline" className={cn("text-xs font-medium border", sc.className)}>
-                      {sc.label}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex gap-1.5 flex-wrap">
-                      {lead.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs text-muted-foreground border-border bg-muted">
-                          {tag}
-                        </Badge>
-                      ))}
-                      {(!lead.tags || lead.tags.length === 0) && (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </div>
-                  </td>
                 </tr>
               );
             })}

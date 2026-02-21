@@ -1,4 +1,6 @@
-import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
+import { useIntegracoesConfig } from "@/lib/integracoes-config";
 
 interface MapPreviewProps {
   center?: { lat: number; lng: number };
@@ -14,23 +16,26 @@ export function MapPreview({
   zoom = 4,
   className = "",
 }: MapPreviewProps) {
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  });
+  const { config: integracoes } = useIntegracoesConfig();
+  const apiKey = integracoes.google_maps_api_key;
+  const { isLoaded } = useGoogleMaps(apiKey);
 
-  if (!isLoaded || !import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+  if (!isLoaded || !apiKey) {
     return (
       <div
         className={`flex items-center justify-center bg-muted text-muted-foreground ${className}`}
       >
         <div className="text-center p-4">
           <p className="text-sm">
-            Configure a chave da API do Google Maps no arquivo .env
+            {!apiKey
+              ? "Google Maps não configurado."
+              : "Carregando mapa..."}
           </p>
-          <p className="text-xs mt-1">
-            Variável: VITE_GOOGLE_MAPS_API_KEY
-          </p>
+          {!apiKey && (
+            <p className="text-xs mt-1">
+              Configure em Configurações &gt; Integrações.
+            </p>
+          )}
         </div>
       </div>
     );

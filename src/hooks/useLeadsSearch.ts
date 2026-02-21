@@ -14,7 +14,8 @@ import {
   type WhatsAppValidationMap,
 } from "@/lib/whatsapp-validation";
 import { searchPlaces, type PlaceSearchResult } from "@/lib/places-search";
-import { salvarBuscaRealizada } from "@/lib/supabase-functions";
+import { salvarBuscaRealizada, fetchChavesLeadsCaptados } from "@/lib/supabase-functions";
+import { getIntegracoesConfig, getCachedConfig } from "@/lib/integracoes-config";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Lead } from "@/components/LeadsTable";
 
@@ -24,9 +25,10 @@ export type LeadWithExtras = Lead & {
   gps_coordinates?: { latitude: number; longitude: number } | null;
   lat?: number;
   lng?: number;
+  jaCaptado?: boolean;
 };
 
-export type SearchSource = "serper" | "places";
+export type SearchSource = "google" | "places";
 
 export interface UseLeadsSearchState {
   allLeads: LeadWithExtras[];
@@ -45,7 +47,7 @@ export interface UseLeadsSearchState {
 }
 
 export interface UseLeadsSearchReturn extends UseLeadsSearchState {
-  search: (term: string, location: string, page?: number) => Promise<void>;
+  search: (term: string, location: string, page?: number, initialCoordinates?: string) => Promise<void>;
   loadNextPage: () => Promise<void>;
   loadPrevPage: () => void;
   setFilters: (f: Partial<{ whatsapp: string; rating: string }>) => void;
@@ -58,8 +60,14 @@ export interface UseLeadsSearchReturn extends UseLeadsSearchState {
   hasWhatsApp: boolean;
 }
 
-function useSerper(): boolean {
-  return Boolean(import.meta.env.VITE_SERPER_API_KEY?.trim());
+async function checkSerper(): Promise<boolean> {
+  const config = await getIntegracoesConfig();
+  return Boolean(config.serper_api_key.trim());
+}
+
+function hasSerperCached(): boolean {
+  const config = getCachedConfig();
+  return Boolean(config.serper_api_key.trim());
 }
 
 function placeToLeadWithExtras(
@@ -151,23 +159,26 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
   );
 
   const search = useCallback(
-    async (term: string, location: string, page: number = 1) => {
+    async (term: string, location: string, page: number = 1, initialCoordinates?: string) => {
       const query = `${term.trim()} ${location.trim()}`.trim();
       if (!query) return;
 
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
-        const hasSerperApi = useSerper();
+        const hasSerperApi = await checkSerper();
         let leads: LeadWithExtras[];
         let hasMore = false;
         let coords: string | null = null;
 
         if (hasSerperApi) {
+          const coordsToUse = page === 1
+            ? initialCoordinates ?? undefined
+            : state.capturedCoordinates ?? initialCoordinates ?? undefined;
           const { results, coordinates, hasMore: hm } = await searchSerperMaps(
             query,
             page,
-            page > 1 ? state.capturedCoordinates ?? undefined : undefined
+            coordsToUse
           );
           const waMap = hasWhatsAppConfig()
             ? await validateWhatsAppNumbers(results)
@@ -196,6 +207,27 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
             tipo_pesquisa: "google",
             user: dbUser.id,
           });
+        }
+
+        try {
+          const chaves = await fetchChavesLeadsCaptados();
+          const telCaptados = new Set(
+            chaves
+              .filter((c) => c.telefone)
+              .map((c) => c.telefone!.replace(/\D/g, ""))
+          );
+          const nomeCaptados = new Set(
+            chaves.map((c) => c.nome.toLowerCase().trim())
+          );
+
+          leads = leads.map((l) => {
+            const tel = l.phone?.replace(/\D/g, "") ?? "";
+            const captadoPorTel = tel.length > 0 && telCaptados.has(tel);
+            const captadoPorNome = nomeCaptados.has(l.name.toLowerCase().trim());
+            return { ...l, jaCaptado: captadoPorTel || captadoPorNome };
+          });
+        } catch {
+          // Se falhar a verificação, segue sem marcar
         }
 
         setState((s) => {
@@ -231,7 +263,7 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
             searchTerm: term,
             searchLocation: location,
             capturedCoordinates: coords ?? s.capturedCoordinates,
-            searchSource: hasSerperApi ? "serper" : "places",
+            searchSource: hasSerperApi ? "google" : "places",
           };
         });
       } catch (err) {
@@ -250,7 +282,7 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
   const loadNextPage = useCallback(() => {
     if (!state.hasMore || state.loading) return;
     const nextPage = state.currentPage + 1;
-    if (state.searchSource === "serper") {
+    if (state.searchSource === "google") {
       search(state.searchTerm, state.searchLocation, nextPage);
     } else {
       setState((s) => {
@@ -294,6 +326,8 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
 
   const toggleSelection = useCallback((id: string) => {
     setState((s) => {
+      const lead = s.filteredLeads.find((l) => l.id === id);
+      if (lead?.jaCaptado) return s;
       const next = new Set(s.selectedIds);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -304,7 +338,9 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
   const selectAll = useCallback(() => {
     setState((s) => {
       const next = new Set(s.selectedIds);
-      s.filteredLeads.forEach((l) => next.add(l.id));
+      s.filteredLeads
+        .filter((l) => !l.jaCaptado)
+        .forEach((l) => next.add(l.id));
       return { ...s, selectedIds: next };
     });
   }, []);
@@ -320,6 +356,41 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
   const clearAllSelections = useCallback(() => {
     setState((s) => ({ ...s, selectedIds: new Set() }));
   }, []);
+
+  const refreshCaptados = useCallback(async () => {
+    try {
+      const chaves = await fetchChavesLeadsCaptados();
+      const telCaptados = new Set(
+        chaves
+          .filter((c) => c.telefone)
+          .map((c) => c.telefone!.replace(/\D/g, ""))
+      );
+      const nomeCaptados = new Set(
+        chaves.map((c) => c.nome.toLowerCase().trim())
+      );
+
+      setState((s) => {
+        const markCaptado = (l: LeadWithExtras) => {
+          const tel = l.phone?.replace(/\D/g, "") ?? "";
+          const captadoPorTel = tel.length > 0 && telCaptados.has(tel);
+          const captadoPorNome = nomeCaptados.has(l.name.toLowerCase().trim());
+          return { ...l, jaCaptado: captadoPorTel || captadoPorNome };
+        };
+
+        const allLeads = s.allLeads.map(markCaptado);
+        const pagesData: Record<number, LeadWithExtras[]> = {};
+        for (const [k, v] of Object.entries(s.pagesData)) {
+          pagesData[Number(k)] = v.map(markCaptado);
+        }
+        const pageData = pagesData[s.currentPage] ?? [];
+        const filteredLeads = applyFilters(pageData, s.filters);
+
+        return { ...s, allLeads, pagesData, filteredLeads };
+      });
+    } catch {
+      // Falha silenciosa
+    }
+  }, [applyFilters]);
 
   const reset = useCallback(() => {
     setState({
@@ -349,8 +420,9 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
     selectAll,
     clearSelection,
     clearAllSelections,
+    refreshCaptados,
     reset,
-    hasSerper: useSerper(),
+    hasSerper: hasSerperCached(),
     hasWhatsApp: hasWhatsAppConfig(),
   };
 }

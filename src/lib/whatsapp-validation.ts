@@ -1,7 +1,9 @@
 /**
  * Validação de números WhatsApp via Evolution API
- * Baseado na lógica do sistema_pronto
+ * Configurações vêm do banco de dados (configuracoes_integracoes)
  */
+
+import { getIntegracoesConfig, getCachedConfig } from "./integracoes-config";
 
 export interface WhatsAppValidationMap {
   [cleanNumber: string]: {
@@ -11,18 +13,19 @@ export interface WhatsAppValidationMap {
   };
 }
 
-function getConfig() {
-  const baseUrl = import.meta.env.VITE_WHATSAPP_BASE_URL?.trim() ?? "";
-  const instance = import.meta.env.VITE_WHATSAPP_INSTANCE?.trim() ?? "";
-  const apiKey = import.meta.env.VITE_WHATSAPP_API_KEY?.trim() ?? "";
-  const authHeader =
-    import.meta.env.VITE_WHATSAPP_AUTH_HEADER?.trim() || "apikey";
-  return { baseUrl, instance, apiKey, authHeader };
+async function getConfig() {
+  const cfg = await getIntegracoesConfig();
+  return {
+    baseUrl: cfg.evolution_api_url.trim(),
+    instance: cfg.evolution_api_instance.trim(),
+    apiKey: cfg.evolution_api_key.trim(),
+    authHeader: "apikey",
+  };
 }
 
 export function hasWhatsAppConfig(): boolean {
-  const { baseUrl, instance, apiKey } = getConfig();
-  return Boolean(baseUrl && instance && apiKey);
+  const cfg = getCachedConfig();
+  return Boolean(cfg.evolution_api_url.trim() && cfg.evolution_api_instance.trim() && cfg.evolution_api_key.trim());
 }
 
 function extractPhoneNumbers(results: { phone?: string; telefone?: string }[]): string[] {
@@ -46,7 +49,7 @@ export async function validateWhatsAppNumbers(
   const numbers = extractPhoneNumbers(results);
   if (numbers.length === 0) return {};
 
-  const { baseUrl, instance, apiKey, authHeader } = getConfig();
+  const { baseUrl, instance, apiKey, authHeader } = await getConfig();
   if (!baseUrl || !instance || !apiKey) return {};
 
   const url = `${baseUrl.replace(/\/$/, "")}/chat/whatsappNumbers/${instance}`;

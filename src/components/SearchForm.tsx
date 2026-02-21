@@ -4,19 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { MapPreview } from "@/components/MapPreview";
-import { useJsApiLoader } from "@react-google-maps/api";
-
-const mapApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
+import { useIntegracoesConfig } from "@/lib/integracoes-config";
 
 export function SearchForm() {
   const [term, setTerm] = useState("");
   const [location, setLocation] = useState("");
   const navigate = useNavigate();
-
-  const { isLoaded: isMapsLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: mapApiKey,
-  });
+  const { config: integracoes, loading: configLoading } = useIntegracoesConfig();
+  const apiKey = integracoes.google_maps_api_key;
+  const { isLoaded: isMapsLoaded } = useGoogleMaps(apiKey);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +22,8 @@ export function SearchForm() {
       `/search?q=${encodeURIComponent(term.trim())}&loc=${encodeURIComponent(location.trim())}`
     );
   };
+
+  const mapsReady = !configLoading && isMapsLoaded;
 
   return (
     <form onSubmit={handleSearch} className="card-gradient rounded-xl border border-border p-6 animate-fade-in">
@@ -50,13 +49,21 @@ export function SearchForm() {
             className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground"
           />
         </div>
-        <Button type="submit" disabled={!term.trim() || !location.trim() || !isMapsLoaded} className="px-8">
-          {!isMapsLoaded ? "Carregando..." : "Buscar"}
+        <Button type="submit" disabled={!term.trim() || !location.trim()} className="px-8">
+          Buscar
         </Button>
       </div>
 
       <div className="mt-5 rounded-lg overflow-hidden border border-border h-[320px] min-h-[320px]">
-        <MapPreview className="h-full w-full" />
+        {mapsReady ? (
+          <MapPreview className="h-full w-full" />
+        ) : (
+          <div className="flex items-center justify-center h-full bg-muted text-muted-foreground">
+            <p className="text-sm">
+              {configLoading ? "Carregando configurações..." : !apiKey ? "Google Maps não configurado." : "Carregando mapa..."}
+            </p>
+          </div>
+        )}
       </div>
     </form>
   );

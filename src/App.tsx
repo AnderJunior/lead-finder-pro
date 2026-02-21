@@ -10,6 +10,8 @@ import Leads from "./pages/Leads";
 import SearchPage from "./pages/SearchPage";
 import Login from "./pages/Login";
 import UsersPage from "./pages/Users";
+import SettingsPage from "./pages/Settings";
+import Funil from "./pages/Funil";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,10 +50,26 @@ const App = () => (
               }
             />
             <Route
+              path="/funil"
+              element={
+                <ProtectedRoute>
+                  <Funil />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/users"
               element={
                 <ProtectedRoute>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
                 </ProtectedRoute>
               }
             />

@@ -1,68 +1,119 @@
-import { useCallback, useState, useRef } from "react";
-import { GoogleMap, useJsApiLoader, DrawingManagerF } from "@react-google-maps/api";
-import { Search, Loader2, Square, Trash2 } from "lucide-react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { GoogleMap, MarkerF, CircleF, Autocomplete } from "@react-google-maps/api";
+import { Search, Loader2, MapPin, Navigation } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-
-interface SelectedArea {
-  northEast: { lat: number; lng: number };
-  southWest: { lat: number; lng: number };
-}
+import { Label } from "@/components/ui/label";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
+import { useIntegracoesConfig } from "@/lib/integracoes-config";
 
 const containerStyle = { width: "100%", height: "100%" };
-const center = { lat: -23.5505, lng: -46.6333 };
+const defaultCenter = { lat: -14.235, lng: -51.9253 };
 
-export function MapSearch() {
+function radiusToZoom(radiusKm: number): number {
+  return Math.min(Math.max(Math.round(15 - Math.log2(Math.max(radiusKm, 0.5))), 5), 18);
+}
+
+interface MapSearchProps {
+  onSearch: (segment: string, location: string, coordinates: string) => void;
+  loading?: boolean;
+}
+
+export function MapSearch({ onSearch, loading = false }: MapSearchProps) {
   const [segment, setSegment] = useState("");
-  const [area, setArea] = useState<SelectedArea | null>(null);
-  const [drawing, setDrawing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const rectRef = useRef<google.maps.Rectangle | null>(null);
+  const [address, setAddress] = useState("");
+  const [radiusKm, setRadiusKm] = useState(5);
+  const [pinLocation, setPinLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [mapZoom, setMapZoom] = useState(4);
 
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: ["drawing"],
-  });
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
-  const onRectangleComplete = useCallback((rectangle: google.maps.Rectangle) => {
-    if (rectRef.current) {
-      rectRef.current.setMap(null);
-    }
-    rectRef.current = rectangle;
-    const bounds = rectangle.getBounds();
-    if (bounds) {
-      const ne = bounds.getNorthEast();
-      const sw = bounds.getSouthWest();
-      setArea({
-        northEast: { lat: ne.lat(), lng: ne.lng() },
-        southWest: { lat: sw.lat(), lng: sw.lng() },
-      });
-    }
-    setDrawing(false);
+  const { config: integracoes, loading: integracoesLoading } = useIntegracoesConfig();
+  const apiKey = integracoes.google_maps_api_key;
+  const { isLoaded, loadError } = useGoogleMaps(apiKey);
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
   }, []);
+
+  const onAutocompleteLoad = useCallback((ac: google.maps.places.Autocomplete) => {
+    autocompleteRef.current = ac;
+  }, []);
+
+  const onPlaceChanged = useCallback(() => {
+    const place = autocompleteRef.current?.getPlace();
+    if (!place?.geometry?.location) return;
+
+    const lat = place.geometry.location.lat();
+    const lng = place.geometry.location.lng();
+    setPinLocation({ lat, lng });
+    setMapCenter({ lat, lng });
+    setAddress(place.formatted_address ?? place.name ?? "");
+    setMapZoom(radiusToZoom(radiusKm));
+  }, [radiusKm]);
+
+  useEffect(() => {
+    if (!pinLocation) return;
+    setMapZoom(radiusToZoom(radiusKm));
+  }, [radiusKm, pinLocation]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!segment.trim() || !area) return;
-    setLoading(true);
-    setTimeout(() => setLoading(false), 1000);
+    if (!segment.trim() || !pinLocation) return;
+
+    const zoom = radiusToZoom(radiusKm);
+    const coords = `@${pinLocation.lat.toFixed(6)},${pinLocation.lng.toFixed(6)},${zoom}z`;
+    onSearch(segment.trim(), address, coords);
   };
 
-  const clearArea = useCallback(() => {
-    setArea(null);
-    if (rectRef.current) {
-      rectRef.current.setMap(null);
-      rectRef.current = null;
-    }
-  }, []);
-
-  if (!isLoaded || !import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+  if (integracoesLoading) {
     return (
       <div className="card-gradient rounded-xl border border-border overflow-hidden animate-fade-in p-8">
-        <div className="flex flex-col items-center justify-center text-muted-foreground">
-          <p className="text-sm">Configure a chave da API do Google Maps no .env</p>
-          <p className="text-xs mt-1">Variável: VITE_GOOGLE_MAPS_API_KEY</p>
+        <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">Carregando configurações...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!apiKey) {
+    return (
+      <div className="card-gradient rounded-xl border border-border overflow-hidden animate-fade-in p-8">
+        <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+          <MapPin className="h-10 w-10" />
+          <p className="text-sm font-medium">API do Google Maps não configurada</p>
+          <p className="text-xs">
+            Peça ao administrador para configurar a chave do Google Maps em Configurações &gt; Integrações.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="card-gradient rounded-xl border border-border overflow-hidden animate-fade-in p-8">
+        <div className="flex flex-col items-center justify-center text-destructive gap-2">
+          <MapPin className="h-10 w-10" />
+          <p className="text-sm font-medium">Erro ao carregar Google Maps</p>
+          <p className="text-xs text-muted-foreground">
+            Verifique se a chave da API é válida e as APIs Maps JavaScript e Places estão
+            habilitadas.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="card-gradient rounded-xl border border-border overflow-hidden animate-fade-in p-8">
+        <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">Carregando mapa...</p>
         </div>
       </div>
     );
@@ -70,69 +121,87 @@ export function MapSearch() {
 
   return (
     <div className="card-gradient rounded-xl border border-border overflow-hidden animate-fade-in">
-      <form
-        onSubmit={handleSearch}
-        className="p-4 border-b border-border flex flex-col sm:flex-row gap-3"
-      >
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={segment}
-            onChange={(e) => setSegment(e.target.value)}
-            placeholder="Segmento: Ex: Restaurantes, Clínicas..."
-            className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground"
-          />
+      <form onSubmit={handleSearch} className="p-4 border-b border-border space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Endereço</Label>
+            <Autocomplete
+              onLoad={onAutocompleteLoad}
+              onPlaceChanged={onPlaceChanged}
+              options={{ componentRestrictions: { country: "br" } }}
+            >
+              <div className="relative">
+                <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Digite o endereço ou local..."
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+            </Autocomplete>
+          </div>
+
+          <div className="w-full sm:w-32 space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Raio (km)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              value={radiusKm}
+              onChange={(e) => setRadiusKm(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
+              className="bg-muted border-border text-foreground text-center"
+            />
+          </div>
         </div>
-        <Button
-          type="button"
-          variant={drawing ? "default" : "outline"}
-          size="sm"
-          className="gap-2 shrink-0"
-          onClick={() => setDrawing(!drawing)}
-        >
-          <Square className="h-3.5 w-3.5" />
-          {drawing ? "Selecionando..." : "Selecionar Área"}
-        </Button>
-        {area && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2 shrink-0"
-            onClick={clearArea}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Limpar
-          </Button>
-        )}
-        <Button
-          type="submit"
-          disabled={loading || !segment.trim() || !area}
-          className="px-6 shrink-0"
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            "Buscar na Área"
-          )}
-        </Button>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Segmento</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={segment}
+                onChange={(e) => setSegment(e.target.value)}
+                placeholder="Ex: Restaurantes, Clínicas, Academias..."
+                className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-end">
+            <Button
+              type="submit"
+              disabled={loading || !segment.trim() || !pinLocation}
+              className="px-8 h-10"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  Buscar na Área
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
       </form>
 
       <div className="px-4 py-2 bg-muted/50 border-b border-border">
         <span className="text-xs text-muted-foreground">
-          {area
-            ? '✅ Área selecionada — Clique em "Buscar na Área" para prospectar'
-            : drawing
-            ? "🖱️ Clique e arraste no mapa para desenhar um retângulo"
-            : '📍 Clique em "Selecionar Área" e desenhe um retângulo no mapa'}
+          {pinLocation
+            ? `📍 Endereço marcado — Raio de ${radiusKm}km selecionado`
+            : "🔎 Digite um endereço acima para marcar no mapa"}
         </span>
       </div>
 
       <div className="h-[500px] w-full relative">
         <GoogleMap
           mapContainerStyle={containerStyle}
-          center={center}
-          zoom={12}
+          center={mapCenter}
+          zoom={mapZoom}
+          onLoad={onMapLoad}
           options={{
             disableDefaultUI: false,
             zoomControl: true,
@@ -141,22 +210,22 @@ export function MapSearch() {
             fullscreenControl: true,
           }}
         >
-          <DrawingManagerF
-            options={{
-              drawingControl: false,
-              drawingModes: [google.maps.drawing.OverlayType.RECTANGLE],
-              rectangleOptions: {
-                fillColor: "hsl(217, 91%, 50%)",
-                fillOpacity: 0.15,
-                strokeColor: "hsl(217, 91%, 50%)",
-                strokeWeight: 2,
-              },
-            }}
-            drawingMode={
-              drawing ? google.maps.drawing.OverlayType.RECTANGLE : null
-            }
-            onRectangleComplete={onRectangleComplete}
-          />
+          {pinLocation && (
+            <>
+              <MarkerF position={pinLocation} />
+              <CircleF
+                center={pinLocation}
+                radius={radiusKm * 1000}
+                options={{
+                  fillColor: "hsl(217, 91%, 50%)",
+                  fillOpacity: 0.1,
+                  strokeColor: "hsl(217, 91%, 50%)",
+                  strokeWeight: 2,
+                  strokeOpacity: 0.6,
+                }}
+              />
+            </>
+          )}
         </GoogleMap>
       </div>
     </div>

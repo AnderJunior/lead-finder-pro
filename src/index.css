@@ -83,3 +83,48 @@
     box-shadow: var(--shadow-card);
   }
 }
+
+/* Scrollbar personalizada do Funil */
+.funil-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.funil-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.funil-scrollbar-track {
+  position: fixed;
+  bottom: 12px;
+  left: calc(256px + 80px);
+  right: 80px;
+  z-index: 50;
+}
+
+.funil-scrollbar-track-inner {
+  background: hsl(220 13% 91%);
+  border-radius: 999px;
+  height: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.funil-scrollbar-thumb {
+  background: #0B64F4;
+  border-radius: 999px;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  cursor: grab;
+  transition: background 0.15s;
+}
+
+.funil-scrollbar-thumb:hover,
+.funil-scrollbar-thumb:active {
+  background: #0952d0;
+}
+
+.funil-scrollbar-thumb:active {
+  cursor: grabbing;
+}

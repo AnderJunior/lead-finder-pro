@@ -1,23 +1,28 @@
-import { Search, LayoutDashboard, Users, MapPin, Download, LogOut, UserCog } from "lucide-react";
+import { Search, LayoutDashboard, Users, MapPin, LogOut, Settings, KanbanSquare, CreditCard, Loader2 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { useSerperCredits } from "@/hooks/useSerperCredits";
 
 const baseNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Search, label: "Nova Busca", path: "/search" },
+  { icon: KanbanSquare, label: "Funil", path: "/funil" },
   { icon: Users, label: "Meus Leads", path: "/leads" },
-  { icon: Download, label: "Exportações", path: "/exports" },
 ];
 
 const adminNavItems = [
-  { icon: UserCog, label: "Usuários", path: "/users" },
+  { icon: Settings, label: "Configurações", path: "/settings" },
 ];
 
 export function AppSidebar() {
   const { signOut, dbUser } = useAuth();
   const navigate = useNavigate();
+  const { credits, totalCredits, loading: creditsLoading } = useSerperCredits();
+
+  const creditsUsed = totalCredits - credits;
 
   const handleLogout = async () => {
     await signOut();
@@ -75,6 +80,44 @@ export function AppSidebar() {
             </NavLink>
           ))}
       </nav>
+
+      {/* Créditos Serper */}
+      <div className="px-4 py-3 border-t border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Créditos API</span>
+        </div>
+        {creditsLoading ? (
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Carregando...</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between mb-1.5">
+              <span className={cn(
+                "text-lg font-bold",
+                credits <= 250 ? "text-red-500" : credits <= 750 ? "text-yellow-500" : "text-emerald-500"
+              )}>
+                {credits.toLocaleString("pt-BR")}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                / {totalCredits.toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <Progress
+              value={((totalCredits - creditsUsed) / totalCredits) * 100}
+              className={cn(
+                "h-2",
+                credits <= 250 ? "[&>div]:bg-red-500" : credits <= 750 ? "[&>div]:bg-yellow-500" : "[&>div]:bg-emerald-500"
+              )}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {creditsUsed.toLocaleString("pt-BR")} utilizados
+            </p>
+          </>
+        )}
+      </div>
 
       {/* Footer com usuário e logout */}
       <div className="p-3 border-t border-border space-y-2">

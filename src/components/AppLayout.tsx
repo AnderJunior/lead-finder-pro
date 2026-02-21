@@ -9,7 +9,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen">
       <AppSidebar />
-      <main className="flex-1 ml-64 p-8">
+      <main className="flex-1 ml-64 p-8 overflow-x-hidden">
         {children}
       </main>
     </div>
