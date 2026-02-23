@@ -12,10 +12,14 @@ import { supabase } from "@/lib/supabase";
 export interface DbUser {
   id: number;
   email: string;
+  nome: string | null;
   status: string;
   plano: string;
   role: string | null;
   auth_id: string | null;
+  empresa_id: number;
+  avatar_url: string | null;
+  telefone: string | null;
 }
 
 interface AuthContextType {
@@ -28,6 +32,7 @@ interface AuthContextType {
     password: string
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  reloadProfile: () => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -121,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signIn,
     signOut,
+    reloadProfile: loadProfile,
     isAdmin: dbUser?.role === "admin",
   };
 

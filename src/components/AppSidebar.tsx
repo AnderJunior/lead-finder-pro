@@ -1,26 +1,55 @@
-import { Search, LayoutDashboard, Users, MapPin, LogOut, Settings, KanbanSquare, CreditCard, Loader2 } from "lucide-react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Search, LayoutDashboard, Users, MapPin, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3 } from "lucide-react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useSerperCredits } from "@/hooks/useSerperCredits";
+import { supabase } from "@/lib/supabase";
 
-const baseNavItems = [
+const topNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Search, label: "Nova Busca", path: "/search" },
-  { icon: KanbanSquare, label: "Funil", path: "/funil" },
-  { icon: Users, label: "Meus Leads", path: "/leads" },
 ];
 
-const adminNavItems = [
+const navegacaoSubItems = [
+  { icon: Search, label: "Nova Busca", path: "/search" },
+  { icon: History, label: "Buscas Realizadas", path: "/buscas-realizadas" },
+];
+
+const bottomNavItems = [
+  { icon: KanbanSquare, label: "Funil", path: "/funil" },
+  { icon: Users, label: "Meus Leads", path: "/leads" },
+  { icon: Medal, label: "Ranking", path: "/ranking" },
+  { icon: BarChart3, label: "Relatórios", path: "/relatorios" },
   { icon: Settings, label: "Configurações", path: "/settings" },
 ];
 
 export function AppSidebar() {
   const { signOut, dbUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { credits, totalCredits, loading: creditsLoading } = useSerperCredits();
+
+  const navegacaoActive = navegacaoSubItems.some((s) => s.path === location.pathname);
+  const [navegacaoOpen, setNavegacaoOpen] = useState(navegacaoActive);
+
+  const [empresaLogo, setEmpresaLogo] = useState<string | null>(null);
+  const [empresaNome, setEmpresaNome] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dbUser?.empresa_id) return;
+    supabase
+      .from("configuracoes_empresa")
+      .select("nome, logo_url")
+      .eq("id", dbUser.empresa_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setEmpresaLogo(data.logo_url || null);
+          setEmpresaNome(data.nome || null);
+        }
+      });
+  }, [dbUser?.empresa_id]);
 
   const creditsUsed = totalCredits - credits;
 
@@ -29,63 +58,91 @@ export function AppSidebar() {
     navigate("/login", { replace: true });
   };
 
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+      isActive
+        ? "bg-primary/10 text-primary glow-border"
+        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+    );
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-sidebar flex flex-col">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-          <MapPin className="h-5 w-5 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="text-base font-bold text-foreground tracking-tight">ProspectMap</h1>
-          <p className="text-xs text-muted-foreground">Prospecção Inteligente</p>
-        </div>
+        {empresaLogo ? (
+          <img
+            src={empresaLogo}
+            alt={empresaNome || "Logo"}
+            className="h-9 max-w-[180px] object-contain"
+          />
+        ) : (
+          <>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shrink-0">
+              <MapPin className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-foreground tracking-tight">
+                {empresaNome || "ProspectMap"}
+              </h1>
+              <p className="text-xs text-muted-foreground">Prospecção Inteligente</p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {baseNavItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                isActive
-                  ? "bg-primary/10 text-primary glow-border"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )
-            }
-          >
+        {topNavItems.map((item) => (
+          <NavLink key={item.path} to={item.path} end className={navLinkClass}>
             <item.icon className="h-4 w-4" />
             {item.label}
           </NavLink>
         ))}
-        {dbUser?.role === "admin" &&
-          adminNavItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-primary/10 text-primary glow-border"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )
-              }
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          ))}
+
+        {/* Navegação (collapsible) */}
+        <div>
+          <button
+            onClick={() => setNavegacaoOpen((o) => !o)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+              navegacaoActive
+                ? "bg-primary/10 text-primary"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            )}
+          >
+            <Compass className="h-4 w-4" />
+            <span className="flex-1 text-left">Navegação</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", navegacaoOpen && "rotate-180")} />
+          </button>
+          <div className={cn(
+            "overflow-hidden transition-all duration-200",
+            navegacaoOpen ? "max-h-40 opacity-100 mt-1" : "max-h-0 opacity-0"
+          )}>
+            <div className="ml-4 border-l border-border/50 pl-2 space-y-0.5">
+              {navegacaoSubItems.map((item) => (
+                <NavLink key={item.path} to={item.path} className={navLinkClass}>
+                  <item.icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {bottomNavItems.map((item) => (
+          <NavLink key={item.path} to={item.path} className={navLinkClass}>
+            <item.icon className="h-4 w-4" />
+            {item.label}
+          </NavLink>
+        ))}
       </nav>
 
       {/* Créditos Serper */}
       <div className="px-4 py-3 border-t border-border">
         <div className="flex items-center gap-2 mb-2">
           <CreditCard className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Créditos API</span>
+          <span className="text-xs font-medium text-muted-foreground">Créditos para Buscar</span>
         </div>
         {creditsLoading ? (
           <div className="flex items-center gap-2">
@@ -120,21 +177,33 @@ export function AppSidebar() {
       </div>
 
       {/* Footer com usuário e logout */}
-      <div className="p-3 border-t border-border space-y-2">
-        {dbUser && (
-          <p className="px-3 py-1 text-xs text-muted-foreground truncate" title={dbUser.email}>
-            {dbUser.email}
-          </p>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4" />
-          Sair
-        </Button>
+      <div className="px-4 py-3 border-t border-border">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 shrink-0 rounded-full bg-muted overflow-hidden">
+            {dbUser?.avatar_url ? (
+              <img src={dbUser.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-sm font-semibold text-muted-foreground uppercase">
+                {(dbUser?.nome || dbUser?.email || "U").charAt(0)}
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate" title={dbUser?.nome || ""}>
+              {dbUser?.nome || "Usuário"}
+            </p>
+            <p className="text-xs text-muted-foreground truncate" title={dbUser?.email || ""}>
+              {dbUser?.email || ""}
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Sair"
+            className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </aside>
   );

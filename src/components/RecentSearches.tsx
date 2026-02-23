@@ -21,7 +21,7 @@ interface RecentSearchesProps {
 
 export function RecentSearches({ buscas = [], loading = false }: RecentSearchesProps) {
   return (
-    <div className="card-gradient rounded-xl border border-border p-5 animate-fade-in flex flex-col h-full">
+    <div className="card-gradient rounded-xl border border-border p-5 animate-fade-in flex flex-col">
       <div className="flex items-center gap-2 mb-4">
         <Clock className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">Buscas Recentes</h3>
@@ -36,11 +36,11 @@ export function RecentSearches({ buscas = [], loading = false }: RecentSearchesP
           Nenhuma busca realizada ainda.
         </p>
       ) : (
-        <div className="flex flex-col gap-2 flex-1 overflow-y-auto pr-1">
-          {buscas.map((s) => (
+        <div className="flex flex-col gap-3">
+          {buscas.slice(0, 6).map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer flex-1"
+              className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <Search className="h-3.5 w-3.5 text-primary shrink-0" />

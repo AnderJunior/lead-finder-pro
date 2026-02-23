@@ -12,6 +12,9 @@ import Login from "./pages/Login";
 import UsersPage from "./pages/Users";
 import SettingsPage from "./pages/Settings";
 import Funil from "./pages/Funil";
+import Ranking from "./pages/Ranking";
+import BuscasRealizadas from "./pages/BuscasRealizadas";
+import Relatorios from "./pages/Relatorios";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +45,14 @@ const App = () => (
               }
             />
             <Route
+              path="/buscas-realizadas"
+              element={
+                <ProtectedRoute>
+                  <BuscasRealizadas />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/leads"
               element={
                 <ProtectedRoute>
@@ -62,6 +73,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ranking"
+              element={
+                <ProtectedRoute>
+                  <Ranking />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/relatorios"
+              element={
+                <ProtectedRoute>
+                  <Relatorios />
                 </ProtectedRoute>
               }
             />

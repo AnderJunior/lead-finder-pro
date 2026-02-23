@@ -18,6 +18,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Loader2,
   Plus,
   MoreHorizontal,
@@ -48,10 +55,12 @@ import {
   criarFunilTarefa,
   atualizarFunilTarefa,
   deletarFunilTarefa,
+  fetchUsuariosEmpresa,
   type FunilEtapa,
   type LeadCaptadoComTarefas,
   type FunilTarefa,
   type LeadCaptado,
+  type UsuarioEmpresa,
 } from "@/lib/supabase-functions";
 
 interface EditarLeadFunilForm {
@@ -91,12 +100,14 @@ const tarefaHoje = (t: FunilTarefa) => {
 };
 
 const Funil = () => {
-  const { dbUser } = useAuth();
+  const { dbUser, isAdmin } = useAuth();
   const { toast } = useToast();
 
   const [etapas, setEtapas] = useState<FunilEtapa[]>([]);
   const [leads, setLeads] = useState<LeadCaptadoComTarefas[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vendedores, setVendedores] = useState<UsuarioEmpresa[]>([]);
+  const [filtroVendedorId, setFiltroVendedorId] = useState<string>("todos");
 
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverEtapa, setDragOverEtapa] = useState<number | null>(null);
@@ -132,7 +143,7 @@ const Funil = () => {
     setLoading(true);
     try {
       const [etapasData, leadsData] = await Promise.all([
-        fetchFunilEtapas(dbUser.id),
+        fetchFunilEtapas(),
         fetchLeadsFunil(),
       ]);
       setEtapas(etapasData);
@@ -151,6 +162,16 @@ const Funil = () => {
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUsuariosEmpresa().then(users => setVendedores(users.filter(u => u.role !== "admin"))).catch(() => {});
+    }
+  }, [isAdmin]);
+
+  const leadsFiltrados = filtroVendedorId === "todos"
+    ? leads
+    : leads.filter(l => l.user_id === Number(filtroVendedorId));
 
   // Sincronizar scrollbar customizada
   useEffect(() => {
@@ -226,7 +247,7 @@ const Funil = () => {
   }, []);
 
   const leadsPorEtapa = (etapaId: number) =>
-    leads
+    leadsFiltrados
       .filter((l) => l.etapa_id === etapaId)
       .sort((a, b) => a.ordem_funil - b.ordem_funil);
 
@@ -369,7 +390,7 @@ const Funil = () => {
             ? Math.max(...destino.map((l) => l.ordem_funil)) + 1
             : 0;
 
-        moverLeadEtapa(leadId, targetEtapa, novaOrdem, dbUser!.id).catch(() => {
+        moverLeadEtapa(leadId, targetEtapa, novaOrdem, dbUser!.id, dbUser!.empresa_id).catch(() => {
           carregarDados();
         });
 
@@ -461,6 +482,7 @@ const Funil = () => {
         descricao: novaTarefaTexto.trim(),
         data_vencimento: novaTarefaData || null,
         concluida: false,
+        empresa_id: dbUser!.empresa_id,
       });
       const novasTarefas = [...detalheLead.funil_tarefas, tarefa];
       setDetalheLead({ ...detalheLead, funil_tarefas: novasTarefas });
@@ -518,8 +540,8 @@ const Funil = () => {
   };
 
   // ── Totais ────────────────────────────────────────────────
-  const totalLeads = leads.length;
-  const valorTotal = leads.reduce((acc, l) => acc + (l.valor || 0), 0);
+  const totalLeads = leadsFiltrados.length;
+  const valorTotal = leadsFiltrados.reduce((acc, l) => acc + (l.valor || 0), 0);
 
   // ── Render ────────────────────────────────────────────────
 
@@ -538,17 +560,32 @@ const Funil = () => {
               {formatarValor(valorTotal) || "R$ 0,00"} no pipeline
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={carregarDados}
-            disabled={loading}
-          >
-            <RefreshCw
-              className={cn("h-4 w-4 mr-2", loading && "animate-spin")}
-            />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-3">
+            {isAdmin && vendedores.length > 0 && (
+              <Select value={filtroVendedorId} onValueChange={setFiltroVendedorId}>
+                <SelectTrigger className="h-9 min-w-[180px] bg-white text-sm">
+                  <SelectValue placeholder="Filtrar vendedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {vendedores.map((v) => (
+                    <SelectItem key={v.id} value={String(v.id)}>{v.nome || v.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={carregarDados}
+              disabled={loading}
+            >
+              <RefreshCw
+                className={cn("h-4 w-4 mr-2", loading && "animate-spin")}
+              />
+              Atualizar
+            </Button>
+          </div>
         </div>
 
         {/* Kanban Board */}

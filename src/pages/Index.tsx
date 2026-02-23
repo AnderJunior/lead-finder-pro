@@ -1,18 +1,48 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { SearchForm } from "@/components/SearchForm";
 import { StatCard } from "@/components/StatCard";
+import { GoalCards } from "@/components/GoalCards";
+import { VendedorCards } from "@/components/VendedorCards";
 import { RecentSearches } from "@/components/RecentSearches";
 import { Badge } from "@/components/ui/badge";
-import { Users, Search, Star, TrendingUp, Loader2 } from "lucide-react";
-import { useDashboardStats } from "@/hooks/useDashboardStats";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Users, Search, Star, Trophy, XCircle, Loader2, Calendar } from "lucide-react";
+import { useDashboardStats, type VendedorPeriodo } from "@/hooks/useDashboardStats";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 function formatNumber(n: number): string {
   return n.toLocaleString("pt-BR");
 }
 
+const PERIODO_LABELS: Record<VendedorPeriodo, string> = {
+  diario: "Hoje",
+  semanal: "Esta semana",
+  mensal: "Este mês",
+};
+
 const Dashboard = () => {
   const stats = useDashboardStats();
+  const { isAdmin } = useAuth();
+  const [vendedorPeriodo, setVendedorPeriodo] = useState<VendedorPeriodo>("mensal");
+  const [metaVendedorId, setMetaVendedorId] = useState<string>("me");
+
+  const metaVendas = metaVendedorId === "me"
+    ? stats.vendasMes
+    : (stats.vendedorMetas[Number(metaVendedorId)]?.vendasMes ?? 0);
+  const metaContatos = metaVendedorId === "me"
+    ? stats.contatosMes
+    : (stats.vendedorMetas[Number(metaVendedorId)]?.contatosMes ?? 0);
+  const metaMetas = metaVendedorId === "me"
+    ? stats.metas
+    : (stats.vendedorMetas[Number(metaVendedorId)]?.metas ?? stats.metas);
 
   return (
     <AppLayout>
@@ -24,7 +54,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
             icon={Users}
             label="Total de Leads"
@@ -45,13 +75,30 @@ const Dashboard = () => {
             value={stats.loading ? "..." : formatNumber(stats.leadsQualificados)}
             change={stats.changeQualificados}
             positive={stats.changeQualificadosPositive}
+            subtitle={stats.loading ? undefined : `${stats.totalLeads > 0 ? ((stats.leadsQualificados / stats.totalLeads) * 100).toFixed(1) : "0"}% de todos os leads`}
+            subtitleClass="text-emerald-600"
           />
           <StatCard
-            icon={TrendingUp}
-            label="Taxa de Conversão"
-            value={stats.loading ? "..." : `${stats.taxaConversao.toFixed(1)}%`}
-            change={stats.changeTaxa}
-            positive={stats.changeTaxaPositive}
+            icon={Trophy}
+            label="Ganhos"
+            value={stats.loading ? "..." : formatNumber(stats.ganhos)}
+            change={stats.changeGanhos}
+            positive={stats.changeGanhosPositive}
+            iconBgClass="bg-emerald-500/10"
+            iconClass="text-emerald-600"
+            subtitle={stats.loading ? undefined : `${stats.totalLeads > 0 ? ((stats.ganhos / stats.totalLeads) * 100).toFixed(1) : "0"}% de taxa de conversão`}
+            subtitleClass="text-emerald-600"
+          />
+          <StatCard
+            icon={XCircle}
+            label="Descartados"
+            value={stats.loading ? "..." : formatNumber(stats.descartados)}
+            change={stats.changeDescartados}
+            positive={stats.changeDescartadosPositive}
+            iconBgClass="bg-red-500/10"
+            iconClass="text-red-500"
+            subtitle={stats.loading ? undefined : `${stats.totalLeads > 0 ? ((stats.descartados / stats.totalLeads) * 100).toFixed(1) : "0"}% de todos os leads`}
+            subtitleClass="text-red-500"
           />
         </div>
 
@@ -61,6 +108,47 @@ const Dashboard = () => {
             <SearchForm />
           </div>
           <RecentSearches buscas={stats.buscasRecentes} loading={stats.loading} />
+        </div>
+
+        {/* Goal Cards */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">Performance das Meta</h2>
+            {isAdmin && stats.vendedores.length > 0 && (
+              <Select value={metaVendedorId} onValueChange={setMetaVendedorId}>
+                <SelectTrigger className="h-9 w-[180px] bg-white text-sm">
+                  <SelectValue placeholder="Vendedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="me">Meta Geral</SelectItem>
+                  {stats.vendedores.map((v) => (
+                    <SelectItem key={v.id} value={String(v.id)}>{v.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <GoalCards vendasMes={metaVendas} contatosMes={metaContatos} metas={metaMetas} loading={stats.loading} />
+        </div>
+
+        {/* Vendedores */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-semibold text-foreground">Performance por Vendedor</h2>
+            <Select value={vendedorPeriodo} onValueChange={(v) => setVendedorPeriodo(v as VendedorPeriodo)}>
+              <SelectTrigger className="w-[160px] h-9 bg-white">
+                <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="diario">Hoje</SelectItem>
+                <SelectItem value="semanal">Esta semana</SelectItem>
+                <SelectItem value="mensal">Este mês</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">Ranking — {PERIODO_LABELS[vendedorPeriodo]}</p>
+          <VendedorCards vendedores={stats.vendedoresPorPeriodo[vendedorPeriodo]} loading={stats.loading} />
         </div>
 
         {/* Recent Leads */}
@@ -141,7 +229,7 @@ const Dashboard = () => {
                             </span>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 text-center">
                           <Badge
                             variant="outline"
                             className={cn(

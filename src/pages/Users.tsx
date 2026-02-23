@@ -54,6 +54,7 @@ import { supabase } from "@/lib/supabase";
 interface DbUserRow {
   id: number;
   email: string;
+  nome: string | null;
   role: string | null;
   status: string | null;
   plano: string | null;
@@ -61,6 +62,7 @@ interface DbUserRow {
 }
 
 const createUserSchema = z.object({
+  nome: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido"),
   password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
   role: z.enum(["admin", "user"]),
@@ -70,7 +72,7 @@ const createUserSchema = z.object({
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
 
 export default function UsersPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, dbUser } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<DbUserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +82,7 @@ export default function UsersPage() {
   const form = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
+      nome: "",
       email: "",
       password: "",
       role: "user",
@@ -92,7 +95,7 @@ export default function UsersPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("users")
-      .select("id, email, role, status, plano, created_at")
+      .select("id, email, nome, role, status, plano, created_at")
       .order("created_at", { ascending: false });
     if (!error) setUsers((data as DbUserRow[]) || []);
     setLoading(false);
@@ -106,21 +109,23 @@ export default function UsersPage() {
     setIsSubmitting(true);
     try {
       await createUserAsAdmin({
+        nome: values.nome,
         email: values.email,
         password: values.password,
         role: values.role,
         plano: values.plano,
+        empresa_id: dbUser!.empresa_id,
       });
       toast({
-        title: "Usuário criado",
-        description: `${values.email} foi cadastrado com sucesso.`,
+        title: "Vendedor criado",
+        description: `${values.nome} foi cadastrado com sucesso.`,
       });
-      form.reset({ email: "", password: "", role: "user", plano: "básico" });
+      form.reset({ nome: "", email: "", password: "", role: "user", plano: "básico" });
       setDialogOpen(false);
       loadUsers();
     } catch (err) {
       toast({
-        title: "Erro ao criar usuário",
+        title: "Erro ao criar vendedor",
         description: err instanceof Error ? err.message : "Erro desconhecido",
         variant: "destructive",
       });
@@ -139,7 +144,7 @@ export default function UsersPage() {
               Acesso negado
             </CardTitle>
             <CardDescription>
-              Apenas usuários com perfil administrador podem acessar esta página.
+              Apenas administradores podem acessar esta página.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -152,27 +157,44 @@ export default function UsersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
+            <h1 className="text-2xl font-bold text-foreground">Vendedores</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Gerencie os usuários do sistema. Apenas administradores podem visualizar e criar usuários.
+              Gerencie os vendedores do sistema. Apenas administradores podem visualizar e criar vendedores.
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <UserPlus className="h-4 w-4" />
-                Novo usuário
+                Novo vendedor
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Novo usuário</DialogTitle>
+                <DialogTitle>Novo vendedor</DialogTitle>
                 <DialogDescription>
-                  Crie um novo usuário. Ele será cadastrado no auth e na tabela de perfis.
+                  Crie um novo vendedor. Ele será cadastrado no auth e na tabela de perfis.
                 </DialogDescription>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="nome"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Nome do vendedor"
+                            disabled={isSubmitting}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="email"
@@ -182,7 +204,7 @@ export default function UsersPage() {
                         <FormControl>
                           <Input
                             type="email"
-                            placeholder="novo@usuario.com"
+                            placeholder="vendedor@empresa.com"
                             disabled={isSubmitting}
                             {...field}
                           />
@@ -280,7 +302,7 @@ export default function UsersPage() {
                       Cancelar
                     </Button>
                     <Button type="submit" disabled={isSubmitting}>
-                      {isSubmitting ? "Criando..." : "Criar usuário"}
+                      {isSubmitting ? "Criando..." : "Criar vendedor"}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -293,10 +315,10 @@ export default function UsersPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UsersIcon className="h-5 w-5" />
-              Lista de usuários
+              Lista de vendedores
             </CardTitle>
             <CardDescription>
-              Todos os usuários cadastrados no sistema.
+              Todos os vendedores cadastrados no sistema.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -306,12 +328,13 @@ export default function UsersPage() {
               </div>
             ) : users.length === 0 ? (
               <p className="text-center py-8 text-muted-foreground">
-                Nenhum usuário cadastrado.
+                Nenhum vendedor cadastrado.
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Nome</TableHead>
                     <TableHead>E-mail</TableHead>
                     <TableHead>Perfil</TableHead>
                     <TableHead>Plano</TableHead>
@@ -322,7 +345,8 @@ export default function UsersPage() {
                 <TableBody>
                   {users.map((u) => (
                     <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.email}</TableCell>
+                      <TableCell className="font-medium">{u.nome || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
                         <Badge variant={u.role === "admin" ? "default" : "secondary"}>
                           {u.role === "admin" ? (

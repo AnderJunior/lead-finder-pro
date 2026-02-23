@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import {
   fetchLeadsCaptados,
   deleteLeadsCaptados,
+  fetchUsuariosEmpresa,
   type LeadCaptado,
+  type UsuarioEmpresa,
 } from "@/lib/supabase-functions";
 import { exportLeadsToExcel } from "@/lib/excel-export";
 import {
@@ -29,6 +31,7 @@ import {
   Users,
   Trash2,
   Download,
+  Upload,
   Search,
   RefreshCw,
   Loader2,
@@ -40,11 +43,13 @@ import {
   ChevronsUpDown,
   Check,
 } from "lucide-react";
+import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface MultiFilterProps {
@@ -105,12 +110,12 @@ function MultiFilter({ label, placeholder, searchable = false, options, selected
                     className="text-xs cursor-pointer"
                   >
                     <div className={cn(
-                      "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                      "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
                       selected.has(opt.value) ? "bg-primary text-primary-foreground" : "opacity-50"
                     )}>
                       {selected.has(opt.value) && <Check className="h-3 w-3" />}
                     </div>
-                    {opt.label}
+                    <span className="truncate">{opt.label}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -133,15 +138,23 @@ const Leads = () => {
   const [filtroLocalizacao, setFiltroLocalizacao] = useState<Set<string>>(new Set());
   const [filtroSegmento, setFiltroSegmento] = useState<Set<string>>(new Set());
   const [filtroOrigem, setFiltroOrigem] = useState<Set<string>>(new Set());
+  const [filtroUsuario, setFiltroUsuario] = useState<Set<string>>(new Set());
+  const [usuarios, setUsuarios] = useState<UsuarioEmpresa[]>([]);
   const [dataInicio, setDataInicio] = useState<Date | undefined>();
   const [dataFim, setDataFim] = useState<Date | undefined>();
+  const [importOpen, setImportOpen] = useState(false);
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchLeadsCaptados();
+      const [data, usrs] = await Promise.all([
+        fetchLeadsCaptados(),
+        isAdmin ? fetchUsuariosEmpresa() : Promise.resolve([]),
+      ]);
       setLeads(data);
+      setUsuarios(usrs);
     } catch (err) {
       toast({
         title: "Erro ao carregar leads",
@@ -151,7 +164,7 @@ const Leads = () => {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, isAdmin]);
 
   useEffect(() => {
     load();
@@ -172,13 +185,14 @@ const Leads = () => {
     [leads]
   );
 
-  const filtrosAtivos = filtroWhatsApp.size > 0 || filtroLocalizacao.size > 0 || filtroSegmento.size > 0 || filtroOrigem.size > 0 || !!dataInicio || !!dataFim;
+  const filtrosAtivos = filtroWhatsApp.size > 0 || filtroLocalizacao.size > 0 || filtroSegmento.size > 0 || filtroOrigem.size > 0 || filtroUsuario.size > 0 || !!dataInicio || !!dataFim;
 
   const limparFiltros = () => {
     setFiltroWhatsApp(new Set());
     setFiltroLocalizacao(new Set());
     setFiltroSegmento(new Set());
     setFiltroOrigem(new Set());
+    setFiltroUsuario(new Set());
     setDataInicio(undefined);
     setDataFim(undefined);
     setCurrentPage(1);
@@ -204,6 +218,7 @@ const Leads = () => {
       if (filtroLocalizacao.size > 0 && !filtroLocalizacao.has(l.localizacao_busca ?? "")) return false;
       if (filtroSegmento.size > 0 && !filtroSegmento.has(l.segmento_busca ?? "")) return false;
       if (filtroOrigem.size > 0 && !filtroOrigem.has(l.origem_busca ?? "")) return false;
+      if (filtroUsuario.size > 0 && !filtroUsuario.has(String(l.user_id))) return false;
 
       if (dataInicio) {
         const captacao = new Date(l.data_captacao);
@@ -220,7 +235,7 @@ const Leads = () => {
 
       return true;
     });
-  }, [leads, busca, filtroWhatsApp, filtroLocalizacao, filtroSegmento, filtroOrigem, dataInicio, dataFim]);
+  }, [leads, busca, filtroWhatsApp, filtroLocalizacao, filtroSegmento, filtroOrigem, filtroUsuario, dataInicio, dataFim]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const safePage = Math.min(currentPage, totalPages);
@@ -353,6 +368,14 @@ const Leads = () => {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload className="h-3.5 w-3.5 mr-2" />
+              Importar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleExport}
               disabled={filtered.length === 0}
             >
@@ -385,7 +408,7 @@ const Leads = () => {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 px-4 py-3">
+          <div className={cn("grid grid-cols-2 gap-3 px-4 py-3", isAdmin ? "md:grid-cols-[0.5fr_1fr_1fr_0.6fr_1fr_1fr]" : "md:grid-cols-[0.5fr_1fr_1fr_0.6fr_1fr]")}>
             <MultiFilter
               label="WhatsApp"
               placeholder="Todos"
@@ -423,6 +446,17 @@ const Leads = () => {
               selected={filtroOrigem}
               onChange={(s) => { setFiltroOrigem(s); setCurrentPage(1); }}
             />
+
+            {isAdmin && (
+              <MultiFilter
+                label="Vendedor"
+                placeholder="Todos"
+                searchable
+                options={usuarios.map((u) => ({ value: String(u.id), label: u.nome || u.email }))}
+                selected={filtroUsuario}
+                onChange={(s) => { setFiltroUsuario(s); setCurrentPage(1); }}
+              />
+            )}
 
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-muted-foreground">Período de captação</label>
@@ -634,6 +668,12 @@ const Leads = () => {
           </div>
         )}
       </div>
+
+      <ImportLeadsDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onSuccess={load}
+      />
     </AppLayout>
   );
 };

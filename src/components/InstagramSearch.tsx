@@ -85,6 +85,7 @@ export function InstagramSearch({ onSearchStarted }: InstagramSearchProps) {
         segmento_busca: ig.searchTerm,
         notas: r.snippet,
         user_id: dbUser.id,
+        empresa_id: dbUser.empresa_id,
       }));
 
       const { count } = await captarLeads(payloads);

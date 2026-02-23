@@ -70,6 +70,7 @@ export function useInstagramSearch(): UseInstagramSearchReturn {
             localizacao: "Instagram",
             tipo_pesquisa: "instagram",
             user: dbUser.id,
+            empresa_id: dbUser.empresa_id,
           });
         }
 

@@ -206,6 +206,7 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
             localizacao: location.trim(),
             tipo_pesquisa: "google",
             user: dbUser.id,
+            empresa_id: dbUser.empresa_id,
           });
         }
 
