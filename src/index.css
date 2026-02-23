@@ -128,3 +128,39 @@
 .funil-scrollbar-thumb:active {
   cursor: grabbing;
 }
+
+/* Ícone com borda gradiente animada */
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.gradient-border-spin {
+  --border-angle: 0deg;
+  border-radius: 10px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--border-angle),
+    #0B64F4,
+    #F6F7F9 50%,
+    #0B64F4
+  );
+  animation: border-spin 2.5s linear infinite;
+}
+
+.gradient-border-spin > .gradient-border-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  background: hsl(var(--card));
+}
+
+@keyframes border-spin {
+  to {
+    --border-angle: 360deg;
+  }
+}

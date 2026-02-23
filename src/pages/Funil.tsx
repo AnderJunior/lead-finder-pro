@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,17 +32,12 @@ import {
   Trash2,
   Pencil,
   Phone,
-  Mail,
-  DollarSign,
   CalendarClock,
-  CheckCircle2,
-  Circle,
   RefreshCw,
-  Building2,
   KanbanSquare,
-  Globe,
   Star,
   X,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -52,14 +48,15 @@ import {
   atualizarLeadFunil,
   removerLeadDoFunil,
   moverLeadEtapa,
-  criarFunilTarefa,
-  atualizarFunilTarefa,
-  deletarFunilTarefa,
   fetchUsuariosEmpresa,
+  fetchFunilAutomacoes,
+  criarFunilAutomacao,
+  deletarFunilAutomacao,
+  executarAutomacoesParaEtapa,
   type FunilEtapa,
   type LeadCaptadoComTarefas,
   type FunilTarefa,
-  type LeadCaptado,
+  type FunilAutomacao,
   type UsuarioEmpresa,
 } from "@/lib/supabase-functions";
 
@@ -102,6 +99,7 @@ const tarefaHoje = (t: FunilTarefa) => {
 const Funil = () => {
   const { dbUser, isAdmin } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [etapas, setEtapas] = useState<FunilEtapa[]>([]);
   const [leads, setLeads] = useState<LeadCaptadoComTarefas[]>([]);
@@ -117,10 +115,13 @@ const Funil = () => {
   const [editandoLead, setEditandoLead] = useState<LeadCaptadoComTarefas | null>(null);
   const [form, setForm] = useState<EditarLeadFunilForm>(formVazio);
 
-  // Dialog: detalhes do lead
-  const [detalheLead, setDetalheLead] = useState<LeadCaptadoComTarefas | null>(null);
-  const [novaTarefaTexto, setNovaTarefaTexto] = useState("");
-  const [novaTarefaData, setNovaTarefaData] = useState("");
+  // Dialog: automações
+  const [autoDialogOpen, setAutoDialogOpen] = useState(false);
+  const [automacoes, setAutomacoes] = useState<FunilAutomacao[]>([]);
+  const [autoEtapaSelecionada, setAutoEtapaSelecionada] = useState<number | null>(null);
+  const [novaAutoDescricao, setNovaAutoDescricao] = useState("");
+  const [novaAutoDias, setNovaAutoDias] = useState("");
+  const [loadingAuto, setLoadingAuto] = useState(false);
 
   // Refs para custom drag e scrollbar
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -390,9 +391,25 @@ const Funil = () => {
             ? Math.max(...destino.map((l) => l.ordem_funil)) + 1
             : 0;
 
-        moverLeadEtapa(leadId, targetEtapa, novaOrdem, dbUser!.id, dbUser!.empresa_id).catch(() => {
-          carregarDados();
-        });
+        moverLeadEtapa(leadId, targetEtapa, novaOrdem, dbUser!.id, dbUser!.empresa_id)
+          .then(() =>
+            executarAutomacoesParaEtapa(leadId, targetEtapa, dbUser!.empresa_id)
+              .then((novasTarefas) => {
+                if (novasTarefas.length > 0) {
+                  setLeads((curr) =>
+                    curr.map((l) =>
+                      l.id === leadId
+                        ? { ...l, funil_tarefas: [...l.funil_tarefas, ...novasTarefas] }
+                        : l
+                    )
+                  );
+                }
+              })
+              .catch(() => {})
+          )
+          .catch(() => {
+            carregarDados();
+          });
 
         return prev.map((l) =>
           l.id === leadId
@@ -461,7 +478,6 @@ const Funil = () => {
     try {
       await removerLeadDoFunil(leadId);
       setLeads((prev) => prev.filter((l) => l.id !== leadId));
-      setDetalheLead(null);
       toast({ title: "Lead removido do funil" });
     } catch (err) {
       toast({
@@ -472,72 +488,55 @@ const Funil = () => {
     }
   };
 
-  // ── Tarefas ───────────────────────────────────────────────
+  // ── Automações ────────────────────────────────────────────
 
-  const adicionarTarefa = async () => {
-    if (!detalheLead || !novaTarefaTexto.trim()) return;
+  const abrirAutoDialog = async () => {
+    setAutoDialogOpen(true);
+    setAutoEtapaSelecionada(null);
+    setLoadingAuto(true);
     try {
-      const tarefa = await criarFunilTarefa({
-        lead_id: detalheLead.id,
-        descricao: novaTarefaTexto.trim(),
-        data_vencimento: novaTarefaData || null,
-        concluida: false,
-        empresa_id: dbUser!.empresa_id,
+      const data = await fetchFunilAutomacoes();
+      setAutomacoes(data);
+    } catch {
+      toast({ title: "Erro ao carregar automações", variant: "destructive" });
+    } finally {
+      setLoadingAuto(false);
+    }
+  };
+
+  const adicionarAutomacao = async () => {
+    if (!autoEtapaSelecionada || !novaAutoDescricao.trim() || !dbUser) return;
+    try {
+      const nova = await criarFunilAutomacao({
+        etapa_id: autoEtapaSelecionada,
+        descricao: novaAutoDescricao.trim(),
+        dias_vencimento: parseInt(novaAutoDias) || 0,
+        ordem: automacoes.filter((a) => a.etapa_id === autoEtapaSelecionada).length,
+        empresa_id: dbUser.empresa_id,
       });
-      const novasTarefas = [...detalheLead.funil_tarefas, tarefa];
-      setDetalheLead({ ...detalheLead, funil_tarefas: novasTarefas });
-      setLeads((prev) =>
-        prev.map((l) =>
-          l.id === detalheLead.id ? { ...l, funil_tarefas: novasTarefas } : l
-        )
-      );
-      setNovaTarefaTexto("");
-      setNovaTarefaData("");
+      setAutomacoes((prev) => [...prev, nova]);
+      setNovaAutoDescricao("");
+      setNovaAutoDias("");
     } catch (err) {
       toast({
-        title: "Erro ao criar tarefa",
+        title: "Erro ao criar automação",
         description: err instanceof Error ? err.message : "Erro desconhecido.",
         variant: "destructive",
       });
     }
   };
 
-  const toggleTarefa = async (tarefa: FunilTarefa) => {
-    if (!detalheLead) return;
-    const novoConcluida = !tarefa.concluida;
+  const removerAutomacao = async (id: number) => {
     try {
-      await atualizarFunilTarefa(tarefa.id, { concluida: novoConcluida });
-      const atualizadas = detalheLead.funil_tarefas.map((t) =>
-        t.id === tarefa.id ? { ...t, concluida: novoConcluida } : t
-      );
-      setDetalheLead({ ...detalheLead, funil_tarefas: atualizadas });
-      setLeads((prev) =>
-        prev.map((l) =>
-          l.id === detalheLead.id ? { ...l, funil_tarefas: atualizadas } : l
-        )
-      );
+      await deletarFunilAutomacao(id);
+      setAutomacoes((prev) => prev.filter((a) => a.id !== id));
     } catch {
-      toast({ title: "Erro ao atualizar tarefa", variant: "destructive" });
+      toast({ title: "Erro ao excluir automação", variant: "destructive" });
     }
   };
 
-  const removerTarefa = async (tarefaId: number) => {
-    if (!detalheLead) return;
-    try {
-      await deletarFunilTarefa(tarefaId);
-      const atualizadas = detalheLead.funil_tarefas.filter(
-        (t) => t.id !== tarefaId
-      );
-      setDetalheLead({ ...detalheLead, funil_tarefas: atualizadas });
-      setLeads((prev) =>
-        prev.map((l) =>
-          l.id === detalheLead.id ? { ...l, funil_tarefas: atualizadas } : l
-        )
-      );
-    } catch {
-      toast({ title: "Erro ao excluir tarefa", variant: "destructive" });
-    }
-  };
+  const autosPorEtapa = (etapaId: number) =>
+    automacoes.filter((a) => a.etapa_id === etapaId).sort((a, b) => a.ordem - b.ordem);
 
   // ── Totais ────────────────────────────────────────────────
   const totalLeads = leadsFiltrados.length;
@@ -561,18 +560,31 @@ const Funil = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {isAdmin && (
+              <button
+                onClick={abrirAutoDialog}
+                className="gradient-border-spin p-[2px] cursor-pointer hover:scale-105 transition-transform"
+                title="Automações do Funil"
+              >
+                <div className="gradient-border-inner">
+                  <Zap className="h-4 w-4 text-primary" />
+                </div>
+              </button>
+            )}
             {isAdmin && vendedores.length > 0 && (
-              <Select value={filtroVendedorId} onValueChange={setFiltroVendedorId}>
-                <SelectTrigger className="h-9 min-w-[180px] bg-white text-sm">
-                  <SelectValue placeholder="Filtrar vendedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {vendedores.map((v) => (
-                    <SelectItem key={v.id} value={String(v.id)}>{v.nome || v.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={filtroVendedorId} onValueChange={setFiltroVendedorId}>
+                  <SelectTrigger className="h-9 min-w-[180px] bg-white text-sm">
+                    <SelectValue placeholder="Filtrar vendedor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {vendedores.map((v) => (
+                      <SelectItem key={v.id} value={String(v.id)}>{v.nome || v.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
             <Button
               variant="outline"
@@ -647,7 +659,7 @@ const Funil = () => {
                         lead={lead}
                         isDragged={draggedId === lead.id}
                         onPointerDown={handlePointerDown}
-                        onClick={() => setDetalheLead(lead)}
+                        onClick={() => navigate(`/lead/${lead.id}`)}
                         onEdit={() => abrirEditarLead(lead)}
                         onRemove={() => removerDoFunil(lead.id)}
                       />
@@ -771,266 +783,135 @@ const Funil = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: detalhes do lead */}
-      <Dialog
-        open={!!detalheLead}
-        onOpenChange={(open) => !open && setDetalheLead(null)}
-      >
-        <DialogContent className="sm:max-w-[560px]">
-          {detalheLead && (
-            <>
-              <DialogHeader>
-                <div className="flex items-start justify-between pr-6">
-                  <div>
-                    <DialogTitle className="text-lg">
-                      {detalheLead.nome}
-                    </DialogTitle>
-                    {detalheLead.endereco && (
-                      <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5" />
-                        {detalheLead.endereco}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </DialogHeader>
+      {/* Dialog: automações do funil */}
+      <Dialog open={autoDialogOpen} onOpenChange={setAutoDialogOpen}>
+        <DialogContent className="sm:max-w-[720px] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-lg">
+              Automações do Funil
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Defina tarefas que serão criadas automaticamente quando um lead entrar em cada etapa.
+            </p>
+          </DialogHeader>
 
-              <div className="space-y-5 py-2">
-                {/* Info do lead */}
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {detalheLead.valor > 0 && (
-                    <div className="flex items-center gap-2 text-foreground">
-                      <DollarSign className="h-4 w-4 text-green-500" />
-                      <span className="font-semibold">
-                        {formatarValor(detalheLead.valor)}
-                      </span>
-                    </div>
-                  )}
-                  {detalheLead.contato && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {detalheLead.contato}
-                      </span>
-                    </div>
-                  )}
-                  {detalheLead.telefone && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Phone className="h-4 w-4" />
-                      {detalheLead.telefone}
-                    </div>
-                  )}
-                  {detalheLead.email && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Mail className="h-4 w-4" />
-                      {detalheLead.email}
-                    </div>
-                  )}
-                  {detalheLead.website && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Globe className="h-4 w-4" />
-                      <a
-                        href={
-                          detalheLead.website.startsWith("http")
-                            ? detalheLead.website
-                            : `https://${detalheLead.website}`
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary hover:underline truncate"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {detalheLead.website}
-                      </a>
-                    </div>
-                  )}
-                  {detalheLead.rating != null && detalheLead.rating > 0 && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Star className="h-4 w-4 text-warning" />
-                      <span className="font-medium text-warning">
-                        {detalheLead.rating}
-                      </span>
-                      <span className="text-xs">
-                        ({detalheLead.avaliacoes} avaliações)
-                      </span>
-                    </div>
-                  )}
-                  {detalheLead.has_whatsapp === true && (
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className="text-xs bg-green-500/15 text-green-700 border-green-500/30"
-                      >
-                        WhatsApp
-                      </Badge>
-                    </div>
-                  )}
-                </div>
+          {loadingAuto ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 text-primary animate-spin" />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto space-y-1 py-2">
+              {etapas.map((etapa) => {
+                const autos = autosPorEtapa(etapa.id);
+                const isSelected = autoEtapaSelecionada === etapa.id;
 
-                {detalheLead.notas && (
-                  <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-                    {detalheLead.notas}
-                  </div>
-                )}
-
-                {/* Etapa + status */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground">Etapa:</span>
-                  <Badge variant="outline" className="text-xs">
-                    {etapas.find((e) => e.id === detalheLead.etapa_id)?.nome ??
-                      "—"}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      detalheLead.status_funil === "em_andamento" &&
-                        "bg-blue-500/10 text-blue-600 border-blue-500/20",
-                      detalheLead.status_funil === "ganho" &&
-                        "bg-green-500/10 text-green-600 border-green-500/20",
-                      detalheLead.status_funil === "perdido" &&
-                        "bg-red-500/10 text-red-600 border-red-500/20"
-                    )}
-                  >
-                    {detalheLead.status_funil === "em_andamento"
-                      ? "Em andamento"
-                      : detalheLead.status_funil === "ganho"
-                        ? "Ganho"
-                        : detalheLead.status_funil === "perdido"
-                          ? "Perdido"
-                          : detalheLead.status_funil}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    Captado em {formatarData(detalheLead.data_captacao)}
-                  </span>
-                </div>
-
-                {/* Tarefas */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4" />
-                    Tarefas
-                  </h4>
-
-                  <div className="space-y-1.5">
-                    {detalheLead.funil_tarefas
-                      .sort(
-                        (a, b) =>
-                          Number(a.concluida) - Number(b.concluida) ||
-                          new Date(a.data_vencimento ?? 0).getTime() -
-                            new Date(b.data_vencimento ?? 0).getTime()
-                      )
-                      .map((tarefa) => (
-                        <div
-                          key={tarefa.id}
-                          className={cn(
-                            "flex items-center gap-2 rounded-lg px-3 py-2 text-sm group transition-colors",
-                            tarefa.concluida
-                              ? "bg-muted/30"
-                              : tarefaVencida(tarefa)
-                                ? "bg-red-500/10"
-                                : tarefaHoje(tarefa)
-                                  ? "bg-amber-500/10"
-                                  : "bg-muted/50"
-                          )}
-                        >
-                          <button
-                            onClick={() => toggleTarefa(tarefa)}
-                            className="flex-shrink-0"
-                          >
-                            {tarefa.concluida ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            ) : (
-                              <Circle className="h-4 w-4 text-muted-foreground hover:text-primary" />
-                            )}
-                          </button>
-                          <span
-                            className={cn(
-                              "flex-1",
-                              tarefa.concluida &&
-                                "line-through text-muted-foreground"
-                            )}
-                          >
-                            {tarefa.descricao}
-                          </span>
-                          {tarefa.data_vencimento && (
-                            <span
-                              className={cn(
-                                "text-xs flex-shrink-0",
-                                tarefaVencida(tarefa)
-                                  ? "text-red-500 font-medium"
-                                  : tarefaHoje(tarefa)
-                                    ? "text-amber-600 font-medium"
-                                    : "text-muted-foreground"
-                              )}
-                            >
-                              {new Date(
-                                tarefa.data_vencimento
-                              ).toLocaleDateString("pt-BR", {
-                                day: "2-digit",
-                                month: "2-digit",
-                              })}
-                            </span>
-                          )}
-                          <button
-                            onClick={() => removerTarefa(tarefa.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-
-                  {/* Adicionar tarefa */}
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Nova tarefa..."
-                      value={novaTarefaTexto}
-                      onChange={(e) => setNovaTarefaTexto(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && adicionarTarefa()
-                      }
-                      className="text-sm"
-                    />
-                    <Input
-                      type="datetime-local"
-                      value={novaTarefaData}
-                      onChange={(e) => setNovaTarefaData(e.target.value)}
-                      className="w-[180px] text-xs"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={adicionarTarefa}
-                      disabled={!novaTarefaTexto.trim()}
+                return (
+                  <div key={etapa.id} className="rounded-lg border border-border overflow-hidden">
+                    <button
+                      onClick={() => setAutoEtapaSelecionada(isSelected ? null : etapa.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50",
+                        isSelected && "bg-muted/50"
+                      )}
                     >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: etapa.cor }}
+                      />
+                      <span className="text-sm font-semibold text-foreground flex-1">
+                        {etapa.nome}
+                      </span>
+                      {autos.length > 0 && (
+                        <Badge variant="secondary" className="text-xs px-2 py-0 h-5">
+                          {autos.length} tarefa{autos.length !== 1 ? "s" : ""}
+                        </Badge>
+                      )}
+                      <svg
+                        className={cn(
+                          "h-4 w-4 text-muted-foreground transition-transform",
+                          isSelected && "rotate-180"
+                        )}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
 
-              <DialogFooter className="gap-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => removerDoFunil(detalheLead.id)}
-                >
-                  <X className="h-3.5 w-3.5 mr-2" />
-                  Remover do Funil
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setDetalheLead(null);
-                    abrirEditarLead(detalheLead);
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5 mr-2" />
-                  Editar
-                </Button>
-              </DialogFooter>
-            </>
+                    {isSelected && (
+                      <div className="border-t border-border bg-muted/20 px-4 py-3 space-y-3">
+                        {autos.length > 0 ? (
+                          <div className="space-y-2">
+                            {autos.map((auto, idx) => (
+                              <div
+                                key={auto.id}
+                                className="flex items-center gap-3 rounded-lg bg-card px-3 py-2.5 border border-border group"
+                              >
+                                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">
+                                    {auto.descricao}
+                                  </p>
+                                  {auto.dias_vencimento > 0 && (
+                                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                      <CalendarClock className="h-3 w-3" />
+                                      Vence em {auto.dias_vencimento} dia{auto.dias_vencimento !== 1 ? "s" : ""}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => removerAutomacao(auto.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-500/10"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic text-center py-2">
+                            Nenhuma tarefa automática configurada para esta etapa.
+                          </p>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                          <Input
+                            placeholder="Descrição da tarefa..."
+                            value={novaAutoDescricao}
+                            onChange={(e) => setNovaAutoDescricao(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && adicionarAutomacao()}
+                            className="text-sm flex-1"
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Dias"
+                            min="0"
+                            value={novaAutoDias}
+                            onChange={(e) => setNovaAutoDias(e.target.value)}
+                            className="w-20 text-sm text-center"
+                            title="Dias para vencimento (0 = sem prazo)"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={adicionarAutomacao}
+                            disabled={!novaAutoDescricao.trim()}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          "Dias" = prazo de vencimento a partir da entrada do lead. 0 = sem prazo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </DialogContent>
       </Dialog>

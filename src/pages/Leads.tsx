@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -145,6 +146,7 @@ const Leads = () => {
   const [importOpen, setImportOpen] = useState(false);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -547,9 +549,9 @@ const Leads = () => {
                           isSelected && "bg-primary/5"
                         )}
                         style={{ animationDelay: `${i * 30}ms` }}
-                        onClick={() => toggleSelection(lead.id)}
+                        onClick={() => navigate(`/lead/${lead.id}`)}
                       >
-                        <td className="px-3 py-4" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-3 py-4" onClick={(e) => { e.stopPropagation(); toggleSelection(lead.id); }}>
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelection(lead.id)}

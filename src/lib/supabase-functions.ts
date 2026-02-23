@@ -232,6 +232,7 @@ export interface FunilTarefa {
   descricao: string;
   data_vencimento: string | null;
   concluida: boolean;
+  concluida_em: string | null;
   created_at: string;
 }
 
@@ -373,6 +374,12 @@ export async function atualizarFunilTarefa(
   id: number,
   updates: Partial<Omit<FunilTarefa, "id" | "created_at" | "lead_id">>
 ): Promise<void> {
+  if (updates.concluida === true && !updates.concluida_em) {
+    updates.concluida_em = new Date().toISOString();
+  } else if (updates.concluida === false) {
+    updates.concluida_em = null;
+  }
+
   const { error } = await supabase
     .from("funil_tarefas")
     .update(updates)
@@ -384,6 +391,171 @@ export async function atualizarFunilTarefa(
 export async function deletarFunilTarefa(id: number): Promise<void> {
   const { error } = await supabase
     .from("funil_tarefas")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
+// ─── Automações do funil (templates de tarefas por etapa) ───────────
+
+export interface FunilAutomacao {
+  id: number;
+  etapa_id: number;
+  descricao: string;
+  dias_vencimento: number;
+  ordem: number;
+  empresa_id: number;
+  created_at: string;
+}
+
+export async function fetchFunilAutomacoes(): Promise<FunilAutomacao[]> {
+  const { data, error } = await supabase
+    .from("funil_automacoes")
+    .select("*")
+    .order("etapa_id")
+    .order("ordem");
+
+  if (error) throw new Error(error.message);
+  return (data as FunilAutomacao[]) ?? [];
+}
+
+export async function criarFunilAutomacao(
+  payload: Omit<FunilAutomacao, "id" | "created_at">
+): Promise<FunilAutomacao> {
+  const { data, error } = await supabase
+    .from("funil_automacoes")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as FunilAutomacao;
+}
+
+export async function atualizarFunilAutomacao(
+  id: number,
+  updates: Partial<Pick<FunilAutomacao, "descricao" | "dias_vencimento" | "ordem">>
+): Promise<void> {
+  const { error } = await supabase
+    .from("funil_automacoes")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function deletarFunilAutomacao(id: number): Promise<void> {
+  const { error } = await supabase
+    .from("funil_automacoes")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function executarAutomacoesParaEtapa(
+  leadId: number,
+  etapaId: number,
+  empresaId: number
+): Promise<FunilTarefa[]> {
+  const automacoes = await fetchFunilAutomacoes();
+  const daEtapa = automacoes.filter((a) => a.etapa_id === etapaId);
+
+  if (daEtapa.length === 0) return [];
+
+  const tarefas = daEtapa.map((a) => ({
+    lead_id: leadId,
+    descricao: a.descricao,
+    data_vencimento: a.dias_vencimento > 0
+      ? new Date(Date.now() + a.dias_vencimento * 86_400_000).toISOString()
+      : null,
+    concluida: false,
+    empresa_id: empresaId,
+  }));
+
+  const { data, error } = await supabase
+    .from("funil_tarefas")
+    .insert(tarefas)
+    .select("*");
+
+  if (error) throw new Error(error.message);
+  return (data as FunilTarefa[]) ?? [];
+}
+
+// ─── Lead individual ─────────────────────────────────────────────────
+
+export async function fetchLeadById(id: number): Promise<LeadCaptadoComTarefas> {
+  const { data, error } = await supabase
+    .from("leads_captados")
+    .select("*, funil_tarefas(*)")
+    .eq("id", id)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as LeadCaptadoComTarefas;
+}
+
+export async function atualizarLead(
+  id: number,
+  updates: Partial<Pick<LeadCaptado, "nome" | "telefone" | "endereco" | "email" | "origem_busca" | "segmento_busca" | "valor" | "contato" | "notas" | "status_funil">>
+): Promise<void> {
+  const { error } = await supabase
+    .from("leads_captados")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
+// ─── Anotações do lead ──────────────────────────────────────────────
+
+export interface LeadAnotacao {
+  id: number;
+  lead_id: number;
+  texto: string;
+  user_id: number;
+  empresa_id: number;
+  created_at: string;
+  user_nome?: string;
+}
+
+export async function fetchLeadAnotacoes(leadId: number): Promise<LeadAnotacao[]> {
+  const { data, error } = await supabase
+    .from("lead_anotacoes")
+    .select("*, users:user_id(nome)")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as any[]).map((row) => ({
+    id: row.id,
+    lead_id: row.lead_id,
+    texto: row.texto,
+    user_id: row.user_id,
+    empresa_id: row.empresa_id,
+    created_at: row.created_at,
+    user_nome: row.users?.nome ?? null,
+  }));
+}
+
+export async function criarLeadAnotacao(
+  payload: { lead_id: number; texto: string; user_id: number; empresa_id: number }
+): Promise<LeadAnotacao> {
+  const { data, error } = await supabase
+    .from("lead_anotacoes")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as LeadAnotacao;
+}
+
+export async function deletarLeadAnotacao(id: number): Promise<void> {
+  const { error } = await supabase
+    .from("lead_anotacoes")
     .delete()
     .eq("id", id);
 
@@ -405,6 +577,17 @@ export async function fetchFunilLogs(): Promise<FunilLogMovimentacao[]> {
   const { data, error } = await supabase
     .from("funil_logs_movimentacao")
     .select("*")
+    .order("data_entrada", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data as FunilLogMovimentacao[]) ?? [];
+}
+
+export async function fetchFunilLogsByLead(leadId: number): Promise<FunilLogMovimentacao[]> {
+  const { data, error } = await supabase
+    .from("funil_logs_movimentacao")
+    .select("*")
+    .eq("lead_id", leadId)
     .order("data_entrada", { ascending: true });
 
   if (error) throw new Error(error.message);

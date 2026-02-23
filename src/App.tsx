@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import UsersPage from "./pages/Users";
 import SettingsPage from "./pages/Settings";
 import Funil from "./pages/Funil";
+import LeadDetails from "./pages/LeadDetails";
 import Ranking from "./pages/Ranking";
 import BuscasRealizadas from "./pages/BuscasRealizadas";
 import Relatorios from "./pages/Relatorios";
@@ -65,6 +66,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Funil />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/lead/:id"
+              element={
+                <ProtectedRoute>
+                  <LeadDetails />
                 </ProtectedRoute>
               }
             />
