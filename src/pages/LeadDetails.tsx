@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -34,10 +34,19 @@ import {
   Tag,
   Target,
   Zap,
+  Sparkles,
+  User,
+  Briefcase,
+  Users,
+  Linkedin,
+  Facebook,
+  Instagram,
+  ChevronDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { enrichLead } from "@/lib/lead-enrichment";
 import {
   fetchLeadById,
   atualizarLead,
@@ -115,8 +124,18 @@ const LeadDetails = () => {
     contato: "",
     notas: "",
     status_funil: "em_andamento",
+    decisor_nome: "",
+    decisor_telefone: "",
+    decisor_email: "",
+    decisor_cargo: "",
+    tamanho_empresa: "",
+    website: "",
+    linkedin_url: "",
+    facebook_url: "",
+    instagram_url: "",
   });
   const [salvando, setSalvando] = useState(false);
+  const [enriquecendo, setEnriquecendo] = useState(false);
 
   // Mover etapa
   const [etapaDestino, setEtapaDestino] = useState<FunilEtapa | null>(null);
@@ -128,9 +147,9 @@ const LeadDetails = () => {
   // Anotações
   const [novaAnotacao, setNovaAnotacao] = useState("");
 
-  const carregarDados = useCallback(async () => {
+  const carregarDados = useCallback(async (silent = false) => {
     if (!id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [leadData, etapasData, logsData, anotacoesData] = await Promise.all([
         fetchLeadById(Number(id)),
@@ -153,6 +172,15 @@ const LeadDetails = () => {
         contato: leadData.contato ?? "",
         notas: leadData.notas ?? "",
         status_funil: leadData.status_funil ?? "em_andamento",
+        decisor_nome: leadData.decisor_nome ?? "",
+        decisor_telefone: leadData.decisor_telefone ?? "",
+        decisor_email: leadData.decisor_email ?? "",
+        decisor_cargo: leadData.decisor_cargo ?? "",
+        tamanho_empresa: leadData.tamanho_empresa ?? "",
+        website: leadData.website ?? "",
+        linkedin_url: leadData.linkedin_url ?? "",
+        facebook_url: leadData.facebook_url ?? "",
+        instagram_url: leadData.instagram_url ?? "",
       });
     } catch (err) {
       toast({
@@ -186,6 +214,15 @@ const LeadDetails = () => {
         case "contato": updates.contato = form.contato.trim() || null; break;
         case "notas": updates.notas = form.notas.trim() || null; break;
         case "status_funil": updates.status_funil = valorDireto ?? form.status_funil; break;
+        case "decisor_nome": updates.decisor_nome = form.decisor_nome.trim() || null; break;
+        case "decisor_telefone": updates.decisor_telefone = form.decisor_telefone.trim() || null; break;
+        case "decisor_email": updates.decisor_email = form.decisor_email.trim() || null; break;
+        case "decisor_cargo": updates.decisor_cargo = form.decisor_cargo.trim() || null; break;
+        case "tamanho_empresa": updates.tamanho_empresa = form.tamanho_empresa.trim() || null; break;
+        case "website": updates.website = form.website.trim() || null; break;
+        case "linkedin_url": updates.linkedin_url = form.linkedin_url.trim() || null; break;
+        case "facebook_url": updates.facebook_url = form.facebook_url.trim() || null; break;
+        case "instagram_url": updates.instagram_url = form.instagram_url.trim() || null; break;
       }
       await atualizarLead(lead.id, updates as any);
       toast({ title: "Salvo" });
@@ -202,6 +239,69 @@ const LeadDetails = () => {
     }
   };
 
+  // ── Enriquecimento de lead ────────────────────────────────
+
+  const enriquecerLead = async () => {
+    if (!lead) return;
+    setEnriquecendo(true);
+    try {
+      const result = await enrichLead(lead.nome, lead.website);
+
+      // Preenche apenas campos em branco
+      const v = (x: string | null | undefined) => !x?.trim();
+      const updates: Record<string, unknown> = {
+        decisor_enriquecido_em: new Date().toISOString(),
+      };
+      if (v(lead.telefone) && result.telefone) updates.telefone = result.telefone;
+      if (v(lead.email) && result.email) updates.email = result.email;
+      if (v(lead.website) && result.website) updates.website = result.website;
+      if (v(lead.decisor_nome) && result.decisor_nome) updates.decisor_nome = result.decisor_nome;
+      if (v(lead.decisor_telefone) && result.decisor_telefone) updates.decisor_telefone = result.decisor_telefone;
+      if (v(lead.decisor_email) && result.decisor_email) updates.decisor_email = result.decisor_email;
+      if (v(lead.decisor_cargo) && result.decisor_cargo) updates.decisor_cargo = result.decisor_cargo;
+      if (v(lead.tamanho_empresa) && result.tamanho_empresa) updates.tamanho_empresa = result.tamanho_empresa;
+      if (v(lead.linkedin_url) && result.linkedin_url) updates.linkedin_url = result.linkedin_url;
+      if (v(lead.facebook_url) && result.facebook_url) updates.facebook_url = result.facebook_url;
+      if (v(lead.instagram_url) && result.instagram_url) updates.instagram_url = result.instagram_url;
+
+      await atualizarLead(lead.id, updates as any);
+      const decisorEnriquecidoEm = new Date().toISOString();
+      setForm((f) => ({
+        ...f,
+        telefone: (updates.telefone as string) ?? f.telefone,
+        email: (updates.email as string) ?? f.email,
+        website: (updates.website as string) ?? f.website,
+        decisor_nome: (updates.decisor_nome as string) ?? f.decisor_nome,
+        decisor_telefone: (updates.decisor_telefone as string) ?? f.decisor_telefone,
+        decisor_email: (updates.decisor_email as string) ?? f.decisor_email,
+        decisor_cargo: (updates.decisor_cargo as string) ?? f.decisor_cargo,
+        tamanho_empresa: (updates.tamanho_empresa as string) ?? f.tamanho_empresa,
+        linkedin_url: (updates.linkedin_url as string) ?? f.linkedin_url,
+        facebook_url: (updates.facebook_url as string) ?? f.facebook_url,
+        instagram_url: (updates.instagram_url as string) ?? f.instagram_url,
+      }));
+      setLead((prev) => ({ ...prev, ...updates, decisor_enriquecido_em: decisorEnriquecidoEm } as LeadCaptadoComTarefas));
+      const found = Object.keys(updates).length > 1;
+      const qtdPreenchidos = Object.keys(updates).filter((k) => k !== "decisor_enriquecido_em").length;
+      toast({
+        title: found ? "Lead enriquecido" : "Nenhum dado novo encontrado",
+        description: found
+          ? `${qtdPreenchidos} campo(s) em branco foram preenchidos com as informações encontradas.`
+          : "Nenhum campo vazio pôde ser preenchido. Tente editar manualmente.",
+        variant: found ? "default" : "default",
+      });
+      await carregarDados(true);
+    } catch (err) {
+      toast({
+        title: "Erro ao enriquecer",
+        description: err instanceof Error ? err.message : "Verifique a configuração da Serper API.",
+        variant: "destructive",
+      });
+    } finally {
+      setEnriquecendo(false);
+    }
+  };
+
   const cancelarEdicaoCampo = () => {
     if (!lead) return;
     setForm({
@@ -215,6 +315,15 @@ const LeadDetails = () => {
       contato: lead.contato ?? "",
       notas: lead.notas ?? "",
       status_funil: lead.status_funil ?? "em_andamento",
+      decisor_nome: lead.decisor_nome ?? "",
+      decisor_telefone: lead.decisor_telefone ?? "",
+      decisor_email: lead.decisor_email ?? "",
+      decisor_cargo: lead.decisor_cargo ?? "",
+      tamanho_empresa: lead.tamanho_empresa ?? "",
+      website: lead.website ?? "",
+      linkedin_url: lead.linkedin_url ?? "",
+      facebook_url: lead.facebook_url ?? "",
+      instagram_url: lead.instagram_url ?? "",
     });
     setEditandoCampo(null);
   };
@@ -347,13 +456,30 @@ const LeadDetails = () => {
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Título + status */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate(-1)} className="p-1 rounded-md hover:bg-muted transition-colors flex-shrink-0">
-              <ArrowLeft className="h-5 w-5 text-muted-foreground" />
-            </button>
-            <h1 className="text-2xl font-bold text-foreground truncate">
-              {lead.nome}
-            </h1>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <button onClick={() => navigate(-1)} className="p-1 rounded-md hover:bg-muted transition-colors flex-shrink-0">
+                <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+              </button>
+              <h1 className="text-2xl font-bold text-foreground truncate">
+                {lead.nome}
+              </h1>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={enriquecerLead}
+              disabled={enriquecendo || !!lead.decisor_enriquecido_em}
+              title={lead.decisor_enriquecido_em ? "Lead já foi enriquecido" : undefined}
+              className="flex-shrink-0 gap-2"
+            >
+              {enriquecendo ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Enriquecer lead
+            </Button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
@@ -444,8 +570,6 @@ const LeadDetails = () => {
                   </span>
                 )}
               </div>
-
-              <Separator />
 
               <div className="space-y-3.5">
                 {/* Nome */}
@@ -607,22 +731,62 @@ const LeadDetails = () => {
                 </EditableField>
 
                 {/* Website */}
-                {lead.website && (
-                  <InfoRow icon={Globe} label="Website">
-                    <span className="text-sm">
-                      <a
-                        href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary hover:underline truncate block"
-                      >
+                <EditableField
+                  icon={Globe}
+                  label="Site"
+                  campo="website"
+                  editandoCampo={editandoCampo}
+                  onEdit={setEditandoCampo}
+                  onSave={salvarCampo}
+                  onCancel={cancelarEdicaoCampo}
+                  salvando={salvando}
+                  input={
+                    <Input
+                      value={form.website}
+                      onChange={(e) => setForm(f => ({ ...f, website: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("website"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                      className="h-8 text-sm"
+                      placeholder="https://exemplo.com"
+                      autoFocus
+                    />
+                  }
+                >
+                  <span className="text-sm text-foreground">
+                    {lead.website ? (
+                      <a href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate block">
                         {lead.website}
                       </a>
-                    </span>
-                  </InfoRow>
-                )}
+                    ) : (
+                      <span className="text-muted-foreground italic">—</span>
+                    )}
+                  </span>
+                </EditableField>
 
-                <Separator />
+                {/* Tamanho da empresa */}
+                <EditableField
+                  icon={Users}
+                  label="Tamanho da Empresa"
+                  campo="tamanho_empresa"
+                  editandoCampo={editandoCampo}
+                  onEdit={setEditandoCampo}
+                  onSave={salvarCampo}
+                  onCancel={cancelarEdicaoCampo}
+                  salvando={salvando}
+                  input={
+                    <Input
+                      value={form.tamanho_empresa}
+                      onChange={(e) => setForm(f => ({ ...f, tamanho_empresa: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("tamanho_empresa"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                      className="h-8 text-sm"
+                      placeholder="Ex: 1-10 funcionários, pequena..."
+                      autoFocus
+                    />
+                  }
+                >
+                  <span className="text-sm text-foreground">
+                    {lead.tamanho_empresa || <span className="text-muted-foreground italic">—</span>}
+                  </span>
+                </EditableField>
 
                 {/* Valor */}
                 <EditableField
@@ -677,11 +841,235 @@ const LeadDetails = () => {
                   </span>
                 </EditableField>
 
+                {/* Decisor (sanfona) */}
+                <Collapsible defaultOpen={!!(lead.decisor_nome || lead.decisor_telefone || lead.decisor_email || lead.decisor_cargo)}>
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 py-1.5 rounded hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Decisor</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+                  <div className="pl-5 space-y-2 pt-1 pb-1">
+                    <EditableField
+                      icon={User}
+                      label="Nome"
+                      campo="decisor_nome"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          value={form.decisor_nome}
+                          onChange={(e) => setForm(f => ({ ...f, decisor_nome: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("decisor_nome"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="Nome do decisor"
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground">
+                        {lead.decisor_nome || <span className="text-muted-foreground italic">—</span>}
+                      </span>
+                    </EditableField>
+                    <EditableField
+                      icon={Phone}
+                      label="Telefone"
+                      campo="decisor_telefone"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          value={form.decisor_telefone}
+                          onChange={(e) => setForm(f => ({ ...f, decisor_telefone: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("decisor_telefone"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="(99) 99999-9999"
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground font-mono">
+                        {lead.decisor_telefone || <span className="text-muted-foreground italic">—</span>}
+                      </span>
+                    </EditableField>
+                    <EditableField
+                      icon={Mail}
+                      label="E-mail"
+                      campo="decisor_email"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          type="email"
+                          value={form.decisor_email}
+                          onChange={(e) => setForm(f => ({ ...f, decisor_email: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("decisor_email"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="email@exemplo.com"
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground">
+                        {lead.decisor_email ? (
+                          <a href={`mailto:${lead.decisor_email}`} className="text-primary hover:underline">{lead.decisor_email}</a>
+                        ) : (
+                          <span className="text-muted-foreground italic">—</span>
+                        )}
+                      </span>
+                    </EditableField>
+                    <EditableField
+                      icon={Briefcase}
+                      label="Cargo"
+                      campo="decisor_cargo"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          value={form.decisor_cargo}
+                          onChange={(e) => setForm(f => ({ ...f, decisor_cargo: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("decisor_cargo"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="CEO, Diretor, Gerente..."
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground">
+                        {lead.decisor_cargo || <span className="text-muted-foreground italic">—</span>}
+                      </span>
+                    </EditableField>
+                  </div>
+                  {lead.decisor_enriquecido_em && (
+                    <p className="pl-5 text-[11px] text-muted-foreground">
+                      Enriquecido em {formatarData(lead.decisor_enriquecido_em)}
+                    </p>
+                  )}
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Redes sociais (sanfona) */}
+                <Collapsible defaultOpen={!!(lead.linkedin_url || lead.facebook_url || lead.instagram_url)}>
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 py-1.5 rounded hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Redes sociais</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+                  <div className="pl-5 space-y-2 pt-1 pb-1">
+                    <EditableField
+                      icon={Linkedin}
+                      label="LinkedIn"
+                      campo="linkedin_url"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          value={form.linkedin_url}
+                          onChange={(e) => setForm(f => ({ ...f, linkedin_url: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("linkedin_url"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="https://linkedin.com/company/..."
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground">
+                        {lead.linkedin_url ? (
+                          <a href={lead.linkedin_url.startsWith("http") ? lead.linkedin_url : `https://${lead.linkedin_url}`} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate block">
+                            LinkedIn
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground italic">—</span>
+                        )}
+                      </span>
+                    </EditableField>
+                    <EditableField
+                      icon={Facebook}
+                      label="Facebook"
+                      campo="facebook_url"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          value={form.facebook_url}
+                          onChange={(e) => setForm(f => ({ ...f, facebook_url: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("facebook_url"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="https://facebook.com/..."
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground">
+                        {lead.facebook_url ? (
+                          <a href={lead.facebook_url.startsWith("http") ? lead.facebook_url : `https://${lead.facebook_url}`} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate block">
+                            Facebook
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground italic">—</span>
+                        )}
+                      </span>
+                    </EditableField>
+                    <EditableField
+                      icon={Instagram}
+                      label="Instagram"
+                      campo="instagram_url"
+                      editandoCampo={editandoCampo}
+                      onEdit={setEditandoCampo}
+                      onSave={salvarCampo}
+                      onCancel={cancelarEdicaoCampo}
+                      salvando={salvando}
+                      input={
+                        <Input
+                          value={form.instagram_url}
+                          onChange={(e) => setForm(f => ({ ...f, instagram_url: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarCampo("instagram_url"); if (e.key === "Escape") cancelarEdicaoCampo(); }}
+                          className="h-8 text-sm"
+                          placeholder="https://instagram.com/..."
+                          autoFocus
+                        />
+                      }
+                    >
+                      <span className="text-sm text-foreground">
+                        {lead.instagram_url ? (
+                          <a href={lead.instagram_url.startsWith("http") ? lead.instagram_url : `https://${lead.instagram_url}`} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate block">
+                            Instagram
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground italic">—</span>
+                        )}
+                      </span>
+                    </EditableField>
+                  </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
               </div>
 
-              <Separator />
-
-              <div className="text-xs text-muted-foreground space-y-1">
+              <div className="text-xs text-muted-foreground space-y-1 pt-3">
                 <p>Captado em {formatarData(lead.data_captacao)}</p>
                 {lead.localizacao_busca && <p>Localização: {lead.localizacao_busca}</p>}
               </div>

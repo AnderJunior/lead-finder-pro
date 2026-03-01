@@ -53,6 +53,7 @@ import {
   criarFunilAutomacao,
   deletarFunilAutomacao,
   executarAutomacoesParaEtapa,
+  criarEtapasPadrao,
   type FunilEtapa,
   type LeadCaptadoComTarefas,
   type FunilTarefa,
@@ -605,6 +606,40 @@ const Funil = () => {
           <div className="card-gradient rounded-xl border border-border p-12 flex flex-col items-center justify-center gap-3">
             <Loader2 className="h-8 w-8 text-primary animate-spin" />
             <p className="text-muted-foreground">Carregando funil...</p>
+          </div>
+        ) : etapas.length === 0 ? (
+          <div className="card-gradient rounded-xl border border-border p-16 flex flex-col items-center justify-center gap-4">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <KanbanSquare className="h-8 w-8 text-primary" />
+            </div>
+            <div className="text-center space-y-1.5">
+              <h2 className="text-lg font-semibold text-foreground">Funil não configurado</h2>
+              <p className="text-sm text-muted-foreground max-w-md">
+                Configure as etapas do funil comercial para organizar seus leads em um pipeline visual.
+                Serão criadas 6 etapas padrão que você pode personalizar depois.
+              </p>
+            </div>
+            <Button
+              onClick={async () => {
+                if (!dbUser) return;
+                try {
+                  const novasEtapas = await criarEtapasPadrao(dbUser.id, dbUser.empresa_id);
+                  setEtapas(novasEtapas);
+                  toast({ title: "Funil configurado com sucesso!" });
+                } catch (err) {
+                  toast({
+                    title: "Erro ao configurar funil",
+                    description: err instanceof Error ? err.message : "Erro desconhecido.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              className="mt-2"
+              size="lg"
+            >
+              <KanbanSquare className="h-4 w-4 mr-2" />
+              Configurar Funil
+            </Button>
           </div>
         ) : (
           <div

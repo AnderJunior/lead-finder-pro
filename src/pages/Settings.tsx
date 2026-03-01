@@ -25,6 +25,10 @@ import {
   Pencil,
   X,
   Check,
+  CreditCard,
+  CalendarClock,
+  Receipt,
+  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
@@ -855,12 +859,13 @@ function TabVendedores() {
   });
 
   const loadAll = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !dbUser) return;
     setLoading(true);
     const [usersRes, metasRes, metasVendedorRes] = await Promise.all([
       supabase
         .from("users")
         .select("id, email, nome, role, status, plano, created_at")
+        .eq("empresa_id", dbUser.empresa_id)
         .order("created_at", { ascending: false }),
       fetchMetas().catch(() => [] as Meta[]),
       fetchMetasVendedor().catch(() => [] as MetaVendedor[]),
@@ -869,7 +874,7 @@ function TabVendedores() {
     setMetas(metasRes as Meta[]);
     setMetasVendedor(metasVendedorRes as MetaVendedor[]);
     setLoading(false);
-  }, [isAdmin]);
+  }, [isAdmin, dbUser]);
 
   useEffect(() => {
     loadAll();
@@ -1840,6 +1845,297 @@ function TabIntegracoes() {
   );
 }
 
+// ─── Aba Pagamentos ─────────────────────────────────────────────────
+
+interface PagamentoRow {
+  id: number;
+  valor: number;
+  status: string;
+  data_vencimento: string;
+  data_pagamento: string | null;
+  metodo_pagamento: string | null;
+  referencia: string | null;
+  asaas_invoice_url: string | null;
+  created_at: string;
+}
+
+interface AssinaturaRow {
+  id: number;
+  status: string;
+  ciclo: string;
+  valor: number;
+  data_vencimento: string;
+  planos: { nome: string } | null;
+}
+
+function TabPagamentos() {
+  const { dbUser } = useAuth();
+  const [pagamentos, setPagamentos] = useState<PagamentoRow[]>([]);
+  const [assinatura, setAssinatura] = useState<AssinaturaRow | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!dbUser) return;
+    (async () => {
+      const [pagRes, assRes] = await Promise.all([
+        supabase
+          .from("pagamentos")
+          .select("id, valor, status, data_vencimento, data_pagamento, metodo_pagamento, referencia, asaas_invoice_url, created_at")
+          .eq("empresa_id", dbUser.empresa_id)
+          .order("data_vencimento", { ascending: false }),
+        supabase
+          .from("assinaturas")
+          .select("id, status, ciclo, valor, data_vencimento, planos(nome)")
+          .eq("empresa_id", dbUser.empresa_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (!pagRes.error) setPagamentos((pagRes.data as PagamentoRow[]) ?? []);
+      if (!assRes.error && assRes.data) setAssinatura(assRes.data as AssinaturaRow);
+      setLoading(false);
+    })();
+  }, [dbUser]);
+
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  }
+
+  function fmtDate(dateStr: string | null) {
+    if (!dateStr) return "—";
+    const d = dateStr.slice(0, 10);
+    const [y, m, day] = d.split("-");
+    if (!y || !m || !day) return "—";
+    return `${day}/${m}/${y}`;
+  }
+
+  function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
+    switch (status) {
+      case "pago": return "default";
+      case "pendente": return "outline";
+      case "atrasado": return "destructive";
+      case "cancelado": return "secondary";
+      default: return "secondary";
+    }
+  }
+
+  function statusLabel(status: string) {
+    const map: Record<string, string> = {
+      pago: "Pago",
+      pendente: "Pendente",
+      atrasado: "Atrasado",
+      cancelado: "Cancelado",
+    };
+    return map[status] || status;
+  }
+
+  function cicloLabel(ciclo: string) {
+    const map: Record<string, string> = {
+      mensal: "Mensal",
+      trimestral: "Trimestral",
+      semestral: "Semestral",
+      anual: "Anual",
+    };
+    return map[ciclo] || ciclo;
+  }
+
+  function metodoLabel(metodo: string | null) {
+    if (!metodo) return "—";
+    const map: Record<string, string> = {
+      pix: "PIX",
+      boleto: "Boleto",
+      credit_card: "Cartão de Crédito",
+      cartao: "Cartão de Crédito",
+    };
+    return map[metodo] || metodo;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const CICLO_MESES: Record<string, number> = { mensal: 1, trimestral: 3, semestral: 6, anual: 12 };
+
+  const pagamentoPendente = pagamentos.find((p) => p.status === "pendente" || p.status === "atrasado");
+
+  let proximoVencimento: string | null = null;
+  let proximoValor: number | null = null;
+  if (!pagamentoPendente && assinatura) {
+    const ultimoPago = pagamentos.find((p) => p.status === "pago");
+    const baseDate = ultimoPago?.data_vencimento || assinatura.data_vencimento;
+    const meses = CICLO_MESES[assinatura.ciclo] || 1;
+    const d = new Date(baseDate);
+    d.setMonth(d.getMonth() + meses);
+    proximoVencimento = d.toISOString().split("T")[0];
+    proximoValor = assinatura.valor;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Cards de resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Receipt className="h-5 w-5 text-primary" />
+              Assinatura Atual
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {assinatura ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-semibold">
+                    {(assinatura.planos as any)?.nome ?? "—"}
+                  </span>
+                  <Badge variant={assinatura.status === "ativa" ? "default" : "destructive"}>
+                    {assinatura.status === "ativa" ? "Ativa" : assinatura.status}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Ciclo: <span className="font-medium text-foreground">{cicloLabel(assinatura.ciclo)}</span>
+                  {" · "}
+                  Valor: <span className="font-medium text-foreground">{formatCurrency(assinatura.valor)}</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Próximo vencimento: <span className="font-medium text-foreground">{fmtDate(assinatura.data_vencimento)}</span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma assinatura encontrada.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarClock className="h-5 w-5 text-primary" />
+              Próximo Pagamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pagamentoPendente ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-3xl font-bold text-primary">
+                    {formatCurrency(pagamentoPendente.valor)}
+                  </span>
+                  <Badge variant={statusBadgeVariant(pagamentoPendente.status)}>
+                    {statusLabel(pagamentoPendente.status)}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Vencimento: <span className="font-medium text-foreground">{fmtDate(pagamentoPendente.data_vencimento)}</span>
+                </p>
+                {pagamentoPendente.asaas_invoice_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => window.open(pagamentoPendente.asaas_invoice_url!, "_blank")}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Ver fatura
+                  </Button>
+                )}
+              </div>
+            ) : proximoVencimento ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-3xl font-bold text-primary">
+                    {formatCurrency(proximoValor!)}
+                  </span>
+                  <Badge variant="outline">Previsto</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Próximo vencimento: <span className="font-medium text-foreground">{fmtDate(proximoVencimento)}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Calculado com base no ciclo {assinatura ? cicloLabel(assinatura.ciclo).toLowerCase() : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhum pagamento pendente.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Histórico de pagamentos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Histórico de Pagamentos
+          </CardTitle>
+          <CardDescription>Todos os pagamentos realizados e pendentes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {pagamentos.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">
+              Nenhum pagamento registrado.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vencimento</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Data Pagamento</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead className="text-right">Fatura</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagamentos.map((pag) => (
+                  <TableRow key={pag.id}>
+                    <TableCell className="font-medium">
+                      {fmtDate(pag.data_vencimento)}
+                    </TableCell>
+                    <TableCell>{formatCurrency(pag.valor)}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusBadgeVariant(pag.status)}>
+                        {statusLabel(pag.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {pag.data_pagamento ? fmtDate(pag.data_pagamento) : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {metodoLabel(pag.metodo_pagamento)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {pag.asaas_invoice_url ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => window.open(pag.asaas_invoice_url!, "_blank")}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Página Principal ───────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -1848,6 +2144,7 @@ export default function SettingsPage() {
   const adminTabs = isAdmin
     ? [
         { value: "empresa", label: "Empresa", icon: Building2 },
+        { value: "pagamentos", label: "Pagamentos", icon: CreditCard },
         { value: "metas", label: "Metas", icon: Target },
         { value: "usuarios", label: "Vendedores", icon: UsersIcon },
         { value: "integracoes", label: "Integrações", icon: Puzzle },
@@ -1887,6 +2184,10 @@ export default function SettingsPage() {
             <>
               <TabsContent value="empresa" className="mt-6">
                 <TabEmpresa />
+              </TabsContent>
+
+              <TabsContent value="pagamentos" className="mt-6">
+                <TabPagamentos />
               </TabsContent>
 
               <TabsContent value="metas" className="mt-6">

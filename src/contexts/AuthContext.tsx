@@ -20,6 +20,11 @@ export interface DbUser {
   empresa_id: number;
   avatar_url: string | null;
   telefone: string | null;
+  empresa_ativo?: boolean;
+  empresa_nome?: string | null;
+  assinatura_status?: string | null;
+  assinatura_vencimento?: string | null;
+  fatura_url?: string | null;
 }
 
 interface AuthContextType {
@@ -27,6 +32,8 @@ interface AuthContextType {
   authUser: AuthUser | null;
   dbUser: DbUser | null;
   loading: boolean;
+  isPasswordRecovery: boolean;
+  clearPasswordRecovery: () => void;
   signIn: (
     email: string,
     password: string
@@ -34,6 +41,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   reloadProfile: () => Promise<void>;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isSubscriptionBlocked: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -67,6 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [dbUser, setDbUser] = useState<DbUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+
+  const clearPasswordRecovery = useCallback(() => {
+    setIsPasswordRecovery(false);
+  }, []);
 
   const loadProfile = useCallback(async () => {
     const profile = await fetchProfile();
@@ -78,8 +92,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (ignore) return;
+
+      if (event === "PASSWORD_RECOVERY") {
+        setIsPasswordRecovery(true);
+      }
 
       setSession(newSession);
       setAuthUser(newSession?.user ?? null);
@@ -119,15 +137,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDbUser(null);
   }, []);
 
+  const isSuperAdmin = dbUser?.role === "super_admin";
+  const assStatus = dbUser?.assinatura_status;
+  const isSubscriptionBlocked =
+    !isSuperAdmin &&
+    !!dbUser &&
+    !!assStatus &&
+    (assStatus === "vencida" || assStatus === "suspensa");
+
   const value: AuthContextType = {
     session,
     authUser,
     dbUser,
     loading,
+    isPasswordRecovery,
+    clearPasswordRecovery,
     signIn,
     signOut,
     reloadProfile: loadProfile,
-    isAdmin: dbUser?.role === "admin",
+    isAdmin: dbUser?.role === "admin" || isSuperAdmin,
+    isSuperAdmin,
+    isSubscriptionBlocked,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -43,11 +43,11 @@ Deno.serve(async (req) => {
 
     const { data: dbUser } = await supabaseAdmin
       .from("users")
-      .select("role")
+      .select("role, empresa_id")
       .eq("auth_id", user.id)
       .single();
 
-    if (!dbUser || dbUser.role !== "admin") {
+    if (!dbUser || (dbUser.role !== "admin" && dbUser.role !== "super_admin")) {
       return new Response(
         JSON.stringify({ error: "Acesso negado. Apenas administradores podem criar usuários." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { email, password, role = "user", plano = "básico" } = body;
+    const { email, password, role = "user", plano = "básico", empresa_id } = body;
+    const targetEmpresaId = empresa_id || dbUser.empresa_id;
 
     if (!email || !password) {
       return new Response(
@@ -90,6 +91,7 @@ Deno.serve(async (req) => {
       role: role || null,
       plano: plano || "básico",
       status: "ativo",
+      empresa_id: targetEmpresaId,
     });
 
     if (insertError) {

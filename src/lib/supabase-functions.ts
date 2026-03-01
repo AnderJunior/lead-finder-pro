@@ -4,7 +4,7 @@ export interface CreateUserPayload {
   nome: string;
   email: string;
   password: string;
-  role?: "admin" | "user";
+  role?: "admin" | "user" | "super_admin";
   plano?: string;
   empresa_id: number;
 }
@@ -177,6 +177,15 @@ export interface LeadCaptado {
   notas: string | null;
   status_funil: string;
   ordem_funil: number;
+  decisor_nome: string | null;
+  decisor_telefone: string | null;
+  decisor_email: string | null;
+  decisor_cargo: string | null;
+  decisor_enriquecido_em: string | null;
+  tamanho_empresa: string | null;
+  linkedin_url: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
 }
 
 export async function fetchLeadsCaptados(): Promise<LeadCaptado[]> {
@@ -243,6 +252,32 @@ export interface LeadCaptadoComTarefas extends LeadCaptado {
 export async function fetchFunilEtapas(): Promise<FunilEtapa[]> {
   const { data, error } = await supabase
     .from("funil_etapas")
+    .select("*")
+    .order("ordem", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data as FunilEtapa[]) ?? [];
+}
+
+const ETAPAS_PADRAO = [
+  { nome: "Novo Lead",          ordem: 0, cor: "#6b7280" },
+  { nome: "Contato Realizado",  ordem: 1, cor: "#3b82f6" },
+  { nome: "Cliente Respondeu",  ordem: 2, cor: "#8b5cf6" },
+  { nome: "Reunião Marcada",    ordem: 3, cor: "#f59e0b" },
+  { nome: "Fechado / Ganho",    ordem: 4, cor: "#22c55e" },
+  { nome: "Perdido",            ordem: 5, cor: "#e00000" },
+];
+
+export async function criarEtapasPadrao(userId: number, empresaId: number): Promise<FunilEtapa[]> {
+  const rows = ETAPAS_PADRAO.map((e) => ({
+    ...e,
+    user_id: userId,
+    empresa_id: empresaId,
+  }));
+
+  const { data, error } = await supabase
+    .from("funil_etapas")
+    .insert(rows)
     .select("*")
     .order("ordem", { ascending: true });
 
@@ -498,7 +533,7 @@ export async function fetchLeadById(id: number): Promise<LeadCaptadoComTarefas> 
 
 export async function atualizarLead(
   id: number,
-  updates: Partial<Pick<LeadCaptado, "nome" | "telefone" | "endereco" | "email" | "origem_busca" | "segmento_busca" | "valor" | "contato" | "notas" | "status_funil">>
+  updates: Partial<Pick<LeadCaptado, "nome" | "telefone" | "endereco" | "email" | "website" | "origem_busca" | "segmento_busca" | "valor" | "contato" | "notas" | "status_funil" | "decisor_nome" | "decisor_telefone" | "decisor_email" | "decisor_cargo" | "decisor_enriquecido_em" | "tamanho_empresa" | "linkedin_url" | "facebook_url" | "instagram_url">>
 ): Promise<void> {
   const { error } = await supabase
     .from("leads_captados")

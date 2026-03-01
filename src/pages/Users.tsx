@@ -91,15 +91,16 @@ export default function UsersPage() {
   });
 
   const loadUsers = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !dbUser) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("users")
       .select("id, email, nome, role, status, plano, created_at")
+      .eq("empresa_id", dbUser.empresa_id)
       .order("created_at", { ascending: false });
     if (!error) setUsers((data as DbUserRow[]) || []);
     setLoading(false);
-  }, [isAdmin]);
+  }, [isAdmin, dbUser]);
 
   useEffect(() => {
     loadUsers();

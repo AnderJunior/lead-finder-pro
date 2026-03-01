@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Search, LayoutDashboard, Users, MapPin, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3 } from "lucide-react";
+import { Search, LayoutDashboard, Users, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3, Headphones } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Progress } from "@/components/ui/progress";
 import { useSerperCredits } from "@/hooks/useSerperCredits";
 import { supabase } from "@/lib/supabase";
+import { SupportDialog } from "@/components/SupportDialog";
 
 const topNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -32,6 +33,7 @@ export function AppSidebar() {
 
   const navegacaoActive = navegacaoSubItems.some((s) => s.path === location.pathname);
   const [navegacaoOpen, setNavegacaoOpen] = useState(navegacaoActive);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const [empresaLogo, setEmpresaLogo] = useState<string | null>(null);
   const [empresaNome, setEmpresaNome] = useState<string | null>(null);
@@ -69,25 +71,19 @@ export function AppSidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-sidebar flex flex-col">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
+      <div className="flex items-center justify-center px-6 py-5 border-b border-border">
         {empresaLogo ? (
           <img
             src={empresaLogo}
-            alt={empresaNome || "Logo"}
+            alt={empresaNome || "ClientScout"}
             className="h-9 max-w-[180px] object-contain"
           />
         ) : (
-          <>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shrink-0">
-              <MapPin className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-foreground tracking-tight">
-                {empresaNome || "ProspectMap"}
-              </h1>
-              <p className="text-xs text-muted-foreground">Prospecção Inteligente</p>
-            </div>
-          </>
+          <img
+            src="/logo-sistema.png"
+            alt="ClientScout"
+            className="h-9 max-w-[200px] object-contain"
+          />
         )}
       </div>
 
@@ -175,6 +171,18 @@ export function AppSidebar() {
           </>
         )}
       </div>
+
+      {/* Suporte */}
+      <div className="px-4 py-3 border-t border-border">
+        <button
+          onClick={() => setSupportOpen(true)}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200"
+        >
+          <Headphones className="h-4 w-4" />
+          Suporte
+        </button>
+      </div>
+      <SupportDialog open={supportOpen} onOpenChange={setSupportOpen} />
 
       {/* Footer com usuário e logout */}
       <div className="px-4 py-3 border-t border-border">
