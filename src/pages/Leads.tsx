@@ -512,6 +512,7 @@ const Leads = () => {
               <table className="w-full table-fixed">
                 <colgroup>
                   <col className="w-10" />
+                  {isAdmin && <col className="w-[12%]" />}
                   <col className="w-[30%]" />
                   <col className="w-[14%]" />
                   <col className="w-[10%]" />
@@ -530,6 +531,9 @@ const Leads = () => {
                         }}
                       />
                     </th>
+                    {isAdmin && (
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vendedor</th>
+                    )}
                     <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Empresa</th>
                     <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Telefone</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avaliação</th>
@@ -557,6 +561,13 @@ const Leads = () => {
                             onCheckedChange={() => toggleSelection(lead.id)}
                           />
                         </td>
+                        {isAdmin && (
+                          <td className="px-3 py-4">
+                            <span className="text-xs font-medium text-foreground truncate block">
+                              {usuarios.find((u) => u.id === lead.user_id)?.nome || usuarios.find((u) => u.id === lead.user_id)?.email || "—"}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-3 py-4 overflow-hidden">
                           <p className="font-medium text-sm text-foreground truncate">{lead.nome}</p>
                           <p className="text-xs text-muted-foreground mt-0.5 truncate">{lead.endereco || "—"}</p>

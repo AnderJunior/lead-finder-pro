@@ -33,7 +33,7 @@ export interface MetaComValor {
   valorEfetivo: number;
 }
 
-export type VendedorPeriodo = "diario" | "semanal" | "mensal";
+export type VendedorPeriodo = "tudo" | "diario" | "semanal" | "mensal" | "mes_anterior";
 
 export interface DashboardStats {
   totalLeads: number;
@@ -111,7 +111,7 @@ export function useDashboardStats(): DashboardStats {
     vendasMes: 0,
     contatosMes: 0,
     vendedores: [],
-    vendedoresPorPeriodo: { diario: [], semanal: [], mensal: [] },
+    vendedoresPorPeriodo: { tudo: [], diario: [], semanal: [], mensal: [], mes_anterior: [] },
     metas: [],
     vendedorMetas: {},
     loading: true,
@@ -129,15 +129,17 @@ export function useDashboardStats(): DashboardStats {
       const semanaAnteriorInicio = new Date(semanaAtualInicio);
       semanaAnteriorInicio.setDate(semanaAnteriorInicio.getDate() - 7);
 
-      const [leads, etapas, buscas, metasGerais, metasVend, rankDiario, rankSemanal, rankMensal] = await Promise.all([
+      const [leads, etapas, buscas, metasGerais, metasVend, rankTudo, rankDiario, rankSemanal, rankMensal, rankMesAnterior] = await Promise.all([
         fetchLeadsCaptados(),
         fetchFunilEtapas(),
         fetchBuscasRealizadas(),
         fetchMetas().catch(() => [] as Meta[]),
         fetchMetasVendedor().catch(() => [] as MetaVendedor[]),
+        fetchVendedoresRanking(null, null).catch(() => []),
         fetchVendedoresRanking(hoje.toISOString()).catch(() => []),
         fetchVendedoresRanking(semanaAtualInicio.toISOString()).catch(() => []),
         fetchVendedoresRanking(mesAtualInicio.toISOString()).catch(() => []),
+        fetchVendedoresRanking(mesAnteriorInicio.toISOString(), mesAtualInicio.toISOString()).catch(() => []),
       ]);
 
       // --- Etapas qualificadas ---
@@ -265,9 +267,11 @@ export function useDashboardStats(): DashboardStats {
             b.buscas - a.buscas
         );
       const vendedoresPorPeriodo: Record<VendedorPeriodo, VendedorStats[]> = {
+        tudo: sortRanking(rankTudo as VendedorStats[]),
         diario: sortRanking(rankDiario as VendedorStats[]),
         semanal: sortRanking(rankSemanal as VendedorStats[]),
         mensal: sortRanking(rankMensal as VendedorStats[]),
+        mes_anterior: sortRanking(rankMesAnterior as VendedorStats[]),
       };
       const vendedores = vendedoresPorPeriodo.mensal;
 

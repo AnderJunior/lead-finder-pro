@@ -21,9 +21,11 @@ import { useDashboardStats, type VendedorPeriodo } from "@/hooks/useDashboardSta
 import { useAuth } from "@/contexts/AuthContext";
 
 const PERIODO_LABELS: Record<VendedorPeriodo, string> = {
+  tudo: "Todo o período",
   diario: "Hoje",
   semanal: "Esta semana",
   mensal: "Este mês",
+  mes_anterior: "Mês passado",
 };
 
 function formatNumber(n: number): string {
@@ -66,9 +68,11 @@ const Ranking = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="tudo">Todo o período</SelectItem>
               <SelectItem value="diario">Hoje</SelectItem>
               <SelectItem value="semanal">Esta semana</SelectItem>
               <SelectItem value="mensal">Este mês</SelectItem>
+              <SelectItem value="mes_anterior">Mês passado</SelectItem>
             </SelectContent>
           </Select>
         </div>

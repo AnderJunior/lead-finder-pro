@@ -828,13 +828,18 @@ export async function deleteUserAsAdmin(userId: number, transferToUserId: number
 
 // ─── Ranking de vendedores (RPC — ignora RLS) ─────────────────────
 
-export async function fetchVendedoresRanking(desde?: string) {
-  const { data, error } = await supabase.rpc("get_vendedores_ranking", {
-    p_desde: desde ?? null,
-  });
+export async function fetchVendedoresRanking(desde?: string | null, ate?: string | null) {
+  // Só incluir params quando houver valor — evita problemas com null no PostgREST
+  const params: { p_desde?: string; p_ate?: string } = {};
+  if (desde != null && desde !== "") params.p_desde = desde;
+  if (ate != null && ate !== "") params.p_ate = ate;
+
+  const { data, error } = await supabase.rpc("get_vendedores_ranking", params);
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as Array<{
+
+  // RPC retorna jsonb: pode vir como array ou string — normalizar
+  let arr: Array<{
     id: number;
     nome: string;
     avatar_url: string | null;
@@ -843,6 +848,27 @@ export async function fetchVendedoresRanking(desde?: string) {
     vendas: number;
     buscas: number;
   }>;
+  if (Array.isArray(data)) {
+    arr = data;
+  } else if (typeof data === "string") {
+    try {
+      arr = JSON.parse(data);
+    } catch {
+      arr = [];
+    }
+  } else {
+    arr = data ? [data] : [];
+  }
+
+  return arr.map((v) => ({
+    id: Number(v.id),
+    nome: String(v.nome ?? ""),
+    avatar_url: v.avatar_url ?? null,
+    leads: Number(v.leads ?? 0),
+    qualificados: Number(v.qualificados ?? 0),
+    vendas: Number(v.vendas ?? 0),
+    buscas: Number(v.buscas ?? 0),
+  }));
 }
 
 // ─── Dashboard ─────────────────────────────────────────────────────

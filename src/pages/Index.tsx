@@ -23,9 +23,11 @@ function formatNumber(n: number): string {
 }
 
 const PERIODO_LABELS: Record<VendedorPeriodo, string> = {
+  tudo: "Todo o período",
   diario: "Hoje",
   semanal: "Esta semana",
   mensal: "Este mês",
+  mes_anterior: "Mês passado",
 };
 
 const Dashboard = () => {
@@ -141,9 +143,11 @@ const Dashboard = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="tudo">Todo o período</SelectItem>
                 <SelectItem value="diario">Hoje</SelectItem>
                 <SelectItem value="semanal">Esta semana</SelectItem>
                 <SelectItem value="mensal">Este mês</SelectItem>
+                <SelectItem value="mes_anterior">Mês passado</SelectItem>
               </SelectContent>
             </Select>
           </div>
