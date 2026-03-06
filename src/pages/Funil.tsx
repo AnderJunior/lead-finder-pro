@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +36,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   Loader2,
   Plus,
@@ -38,6 +61,13 @@ import {
   Star,
   X,
   Zap,
+  Search,
+  Settings,
+  GripVertical,
+  Filter,
+  CalendarIcon,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,6 +84,10 @@ import {
   deletarFunilAutomacao,
   executarAutomacoesParaEtapa,
   criarEtapasPadrao,
+  atualizarFunilEtapa,
+  criarFunilEtapa,
+  deletarFunilEtapa,
+  reordenarFunilEtapas,
   type FunilEtapa,
   type LeadCaptadoComTarefas,
   type FunilTarefa,
@@ -106,7 +140,13 @@ const Funil = () => {
   const [leads, setLeads] = useState<LeadCaptadoComTarefas[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendedores, setVendedores] = useState<UsuarioEmpresa[]>([]);
-  const [filtroVendedorId, setFiltroVendedorId] = useState<string>("todos");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filtroUsuario, setFiltroUsuario] = useState<Set<string>>(new Set());
+  const [filtroOrigem, setFiltroOrigem] = useState<Set<string>>(new Set());
+  const [filtroSegmento, setFiltroSegmento] = useState<Set<string>>(new Set());
+  const [filtroLocalizacao, setFiltroLocalizacao] = useState<Set<string>>(new Set());
+  const [filtroDataDe, setFiltroDataDe] = useState<Date | undefined>();
+  const [filtroDataAte, setFiltroDataAte] = useState<Date | undefined>();
 
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverEtapa, setDragOverEtapa] = useState<number | null>(null);
@@ -123,6 +163,19 @@ const Funil = () => {
   const [novaAutoDescricao, setNovaAutoDescricao] = useState("");
   const [novaAutoDias, setNovaAutoDias] = useState("");
   const [loadingAuto, setLoadingAuto] = useState(false);
+
+  // Dialog: configuração do funil
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [editandoEtapa, setEditandoEtapa] = useState<FunilEtapa | null>(null);
+  const [editEtapaNome, setEditEtapaNome] = useState("");
+  const [editEtapaCor, setEditEtapaCor] = useState("#6b7280");
+  const [novaEtapaNome, setNovaEtapaNome] = useState("");
+  const [novaEtapaCor, setNovaEtapaCor] = useState("#6b7280");
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [etapaExcluirConfirm, setEtapaExcluirConfirm] = useState<FunilEtapa | null>(null);
+  const [novaColunaExpandida, setNovaColunaExpandida] = useState(false);
+  const [configDragFrom, setConfigDragFrom] = useState<number | null>(null);
+  const [configDragOver, setConfigDragOver] = useState<number | null>(null);
 
   // Refs para custom drag e scrollbar
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -171,15 +224,76 @@ const Funil = () => {
     }
   }, [isAdmin]);
 
-  const leadsFiltrados = filtroVendedorId === "todos"
-    ? leads
-    : leads.filter(l => l.user_id === Number(filtroVendedorId));
+  const origensUnicas = useMemo(
+    () => [...new Set(leads.map((l) => l.origem_busca).filter(Boolean))] as string[],
+    [leads]
+  );
+  const segmentosUnicos = useMemo(
+    () => [...new Set(leads.map((l) => l.segmento_busca).filter(Boolean))] as string[],
+    [leads]
+  );
+  const localizacoesUnicas = useMemo(
+    () => [...new Set(leads.map((l) => l.localizacao_busca).filter(Boolean))] as string[],
+    [leads]
+  );
 
-  // Sincronizar scrollbar customizada
+  // Memo: evita recomputar filtros a cada render (752+ leads)
+  const leadsFiltrados = useMemo(() => {
+    let result = leads;
+    if (filtroUsuario.size > 0) {
+      result = result.filter((l) => filtroUsuario.has(String(l.user_id)));
+    }
+    if (filtroOrigem.size > 0) {
+      result = result.filter((l) => filtroOrigem.has(l.origem_busca ?? ""));
+    }
+    if (filtroSegmento.size > 0) {
+      result = result.filter((l) => filtroSegmento.has(l.segmento_busca ?? ""));
+    }
+    if (filtroLocalizacao.size > 0) {
+      result = result.filter((l) => filtroLocalizacao.has(l.localizacao_busca ?? ""));
+    }
+    if (filtroDataDe) {
+      const inicio = new Date(filtroDataDe);
+      inicio.setHours(0, 0, 0, 0);
+      result = result.filter((l) => new Date(l.data_captacao) >= inicio);
+    }
+    if (filtroDataAte) {
+      const fim = new Date(filtroDataAte);
+      fim.setHours(23, 59, 59, 999);
+      result = result.filter((l) => new Date(l.data_captacao) <= fim);
+    }
+    if (!searchQuery.trim()) return result;
+    const q = searchQuery.trim().toLowerCase();
+    const telQuery = q.replace(/\D/g, "");
+    return result.filter((l) => {
+      const nome = (l.nome ?? "").toLowerCase();
+      const tel = (l.telefone ?? "").replace(/\D/g, "");
+      return nome.includes(q) || (telQuery && tel.includes(telQuery));
+    });
+  }, [leads, filtroUsuario, filtroOrigem, filtroSegmento, filtroLocalizacao, filtroDataDe, filtroDataAte, searchQuery]);
+
+  // Memo: map etapaId -> leads ordenados (evita filter+sort repetido por coluna)
+  const cardsByEtapa = useMemo(() => {
+    const map = new Map<number, LeadCaptadoComTarefas[]>();
+    for (const l of leadsFiltrados) {
+      const eid = l.etapa_id;
+      if (eid == null) continue;
+      const arr = map.get(eid) ?? [];
+      arr.push(l);
+      map.set(eid, arr);
+    }
+    for (const arr of map.values()) {
+      arr.sort((a, b) => a.ordem_funil - b.ordem_funil);
+    }
+    return map;
+  }, [leadsFiltrados]);
+
+  // Sincronizar scrollbar customizada (throttled via rAF)
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
 
+    let rafScheduled = false;
     const updateThumb = () => {
       const { scrollLeft, scrollWidth, clientWidth } = container;
       if (scrollWidth <= clientWidth) {
@@ -193,16 +307,25 @@ const Funil = () => {
       setThumbStyle({ left, width: thumbW });
     };
 
+    const throttledUpdate = () => {
+      if (rafScheduled) return;
+      rafScheduled = true;
+      requestAnimationFrame(() => {
+        rafScheduled = false;
+        updateThumb();
+      });
+    };
+
     updateThumb();
-    container.addEventListener("scroll", updateThumb);
-    const ro = new ResizeObserver(updateThumb);
+    container.addEventListener("scroll", throttledUpdate, { passive: true });
+    const ro = new ResizeObserver(throttledUpdate);
     ro.observe(container);
 
     return () => {
-      container.removeEventListener("scroll", updateThumb);
+      container.removeEventListener("scroll", throttledUpdate);
       ro.disconnect();
     };
-  }, [etapas, leads]);
+  }, [etapas.length, leadsFiltrados.length]);
 
   const handleThumbDrag = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -248,13 +371,12 @@ const Funil = () => {
     });
   }, []);
 
-  const leadsPorEtapa = (etapaId: number) =>
-    leadsFiltrados
-      .filter((l) => l.etapa_id === etapaId)
-      .sort((a, b) => a.ordem_funil - b.ordem_funil);
+  const leadsPorEtapa = useCallback((etapaId: number) =>
+    cardsByEtapa.get(etapaId) ?? [], [cardsByEtapa]);
 
-  const totalEtapa = (etapaId: number) =>
-    leadsPorEtapa(etapaId).reduce((acc, l) => acc + (l.valor || 0), 0);
+  const totalEtapa = useCallback((etapaId: number) =>
+    (cardsByEtapa.get(etapaId) ?? []).reduce((acc, l) => acc + (l.valor || 0), 0),
+  [cardsByEtapa]);
 
   // ── Custom Pointer Drag & Drop ──────────────────────────
 
@@ -306,11 +428,11 @@ const Funil = () => {
       }
     };
 
+    let loopActive = false;
     const loop = () => {
       doScroll();
-      rafId = requestAnimationFrame(loop);
+      if (loopActive) rafId = requestAnimationFrame(loop);
     };
-    rafId = requestAnimationFrame(loop);
 
     const onMove = (e: PointerEvent) => {
       const ds = dragState.current;
@@ -328,6 +450,10 @@ const Funil = () => {
         setDraggedId(ds.id);
         document.body.style.userSelect = "none";
         document.body.style.cursor = "grabbing";
+        if (!loopActive) {
+          loopActive = true;
+          rafId = requestAnimationFrame(loop);
+        }
 
         const sourceEl = document.querySelector(
           `[data-lead-id="${ds.id}"]`
@@ -351,11 +477,13 @@ const Funil = () => {
       }
 
       const etapaId = getColumnAtPoint(e.clientX);
-      setDragOverEtapa(etapaId);
+      // Só atualiza state quando muda (evita re-renders desnecessários no drag)
+      setDragOverEtapa((prev) => (prev === etapaId ? prev : etapaId));
     };
 
     const cleanup = () => {
       const ds = dragState.current;
+      loopActive = false;
       if (ds.clone) {
         ds.clone.remove();
         ds.clone = null;
@@ -441,7 +569,7 @@ const Funil = () => {
 
   // ── Editar dados do funil ──────────────────────────────────
 
-  const abrirEditarLead = (lead: LeadCaptadoComTarefas) => {
+  const abrirEditarLead = useCallback((lead: LeadCaptadoComTarefas) => {
     setEditandoLead(lead);
     setForm({
       valor: lead.valor ? String(lead.valor) : "",
@@ -450,7 +578,7 @@ const Funil = () => {
       status_funil: lead.status_funil ?? "em_andamento",
     });
     setEditDialogOpen(true);
-  };
+  }, []);
 
   const salvarEdicao = async () => {
     if (!editandoLead) return;
@@ -475,7 +603,7 @@ const Funil = () => {
 
   // ── Remover do funil ───────────────────────────────────────
 
-  const removerDoFunil = async (leadId: number) => {
+  const removerDoFunil = useCallback(async (leadId: number) => {
     try {
       await removerLeadDoFunil(leadId);
       setLeads((prev) => prev.filter((l) => l.id !== leadId));
@@ -487,7 +615,7 @@ const Funil = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [toast]);
 
   // ── Automações ────────────────────────────────────────────
 
@@ -539,9 +667,15 @@ const Funil = () => {
   const autosPorEtapa = (etapaId: number) =>
     automacoes.filter((a) => a.etapa_id === etapaId).sort((a, b) => a.ordem - b.ordem);
 
-  // ── Totais ────────────────────────────────────────────────
-  const totalLeads = leadsFiltrados.length;
-  const valorTotal = leadsFiltrados.reduce((acc, l) => acc + (l.valor || 0), 0);
+  // Handlers estáveis para os cards (evita re-render em cascata)
+  const handleCardNavigate = useCallback((leadId: number) => navigate(`/lead/${leadId}`), [navigate]);
+  const handleCardRemove = useCallback((leadId: number) => removerDoFunil(leadId), [removerDoFunil]);
+
+  // ── Totais (memo para evitar recálculo) ────────────────────
+  const { totalLeads, valorTotal } = useMemo(() => ({
+    totalLeads: leadsFiltrados.length,
+    valorTotal: leadsFiltrados.reduce((acc, l) => acc + (l.valor || 0), 0),
+  }), [leadsFiltrados]);
 
   // ── Render ────────────────────────────────────────────────
 
@@ -560,7 +694,16 @@ const Funil = () => {
               {formatarValor(valorTotal) || "R$ 0,00"} no pipeline
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Pesquisar por nome ou telefone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 w-[240px] bg-white text-sm"
+              />
+            </div>
             {isAdmin && (
               <button
                 onClick={abrirAutoDialog}
@@ -572,19 +715,388 @@ const Funil = () => {
                 </div>
               </button>
             )}
-            {isAdmin && vendedores.length > 0 && (
+            {isAdmin && (vendedores.length > 0 || etapas.length > 0) && (
               <div className="flex items-center gap-2">
-                <Select value={filtroVendedorId} onValueChange={setFiltroVendedorId}>
-                  <SelectTrigger className="h-9 min-w-[180px] bg-white text-sm">
-                    <SelectValue placeholder="Filtrar vendedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    {vendedores.map((v) => (
-                      <SelectItem key={v.id} value={String(v.id)}>{v.nome || v.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      className={cn(
+                        "relative p-2 rounded-lg hover:bg-muted transition-colors",
+                        (filtroUsuario.size > 0 ||
+                          filtroOrigem.size > 0 ||
+                          filtroSegmento.size > 0 ||
+                          filtroLocalizacao.size > 0 ||
+                          filtroDataDe ||
+                          filtroDataAte) && "text-primary"
+                      )}
+                      title="Filtros"
+                    >
+                      <Filter className="h-4 w-4" />
+                      {(filtroUsuario.size > 0 ||
+                        filtroOrigem.size > 0 ||
+                        filtroSegmento.size > 0 ||
+                        filtroLocalizacao.size > 0 ||
+                        filtroDataDe ||
+                        filtroDataAte) && (
+                        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[320px] p-0"
+                    align="end"
+                    side="bottom"
+                    sideOffset={6}
+                  >
+                    <div className="px-4 py-3 border-b border-border">
+                      <h3 className="font-semibold text-sm">Filtros</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Selecione os filtros para refinar os leads do funil
+                      </p>
+                    </div>
+                    <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          Usuário responsável
+                        </label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-full justify-between text-xs font-normal",
+                                filtroUsuario.size === 0 && "text-muted-foreground"
+                              )}
+                            >
+                              <span className="truncate">
+                                {filtroUsuario.size === 0
+                                  ? "Todos"
+                                  : filtroUsuario.size === 1
+                                    ? vendedores.find((v) => String(v.id) === [...filtroUsuario][0])?.nome || [...filtroUsuario][0]
+                                    : `${filtroUsuario.size} selecionados`}
+                              </span>
+                              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[260px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar..." className="h-9 text-xs" />
+                              <CommandList>
+                                <CommandEmpty className="py-3 text-xs">Nenhum resultado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    onSelect={() => setFiltroUsuario(new Set())}
+                                    className="text-xs cursor-pointer"
+                                  >
+                                    <div className={cn(
+                                      "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                                      filtroUsuario.size === 0 ? "bg-primary text-primary-foreground" : "opacity-50"
+                                    )}>
+                                      {filtroUsuario.size === 0 && <Check className="h-3 w-3" />}
+                                    </div>
+                                    Todos
+                                  </CommandItem>
+                                  {vendedores.map((v) => {
+                                    const val = String(v.id);
+                                    const sel = filtroUsuario.has(val);
+                                    return (
+                                      <CommandItem
+                                        key={v.id}
+                                        value={v.nome || v.email}
+                                        onSelect={() => {
+                                          const next = new Set(filtroUsuario);
+                                          if (next.has(val)) next.delete(val);
+                                          else next.add(val);
+                                          setFiltroUsuario(next);
+                                        }}
+                                        className="text-xs cursor-pointer"
+                                      >
+                                        <div className={cn(
+                                          "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                                          sel ? "bg-primary text-primary-foreground" : "opacity-50"
+                                        )}>
+                                          {sel && <Check className="h-3 w-3" />}
+                                        </div>
+                                        <span className="truncate">{v.nome || v.email}</span>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">Origem</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-full justify-between text-xs font-normal",
+                                filtroOrigem.size === 0 && "text-muted-foreground"
+                              )}
+                            >
+                              <span className="truncate">
+                                {filtroOrigem.size === 0
+                                  ? "Todas"
+                                  : filtroOrigem.size === 1
+                                    ? [...filtroOrigem][0] || "—"
+                                    : `${filtroOrigem.size} selecionadas`}
+                              </span>
+                              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[260px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar..." className="h-9 text-xs" />
+                              <CommandList>
+                                <CommandEmpty className="py-3 text-xs">Nenhum resultado.</CommandEmpty>
+                                <CommandGroup>
+                                  {origensUnicas.map((o) => {
+                                    const sel = filtroOrigem.has(o);
+                                    return (
+                                      <CommandItem
+                                        key={o}
+                                        value={o}
+                                        onSelect={() => {
+                                          const next = new Set(filtroOrigem);
+                                          if (next.has(o)) next.delete(o);
+                                          else next.add(o);
+                                          setFiltroOrigem(next);
+                                        }}
+                                        className="text-xs cursor-pointer"
+                                      >
+                                        <div className={cn(
+                                          "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                                          sel ? "bg-primary text-primary-foreground" : "opacity-50"
+                                        )}>
+                                          {sel && <Check className="h-3 w-3" />}
+                                        </div>
+                                        <span className="truncate">{o}</span>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">Segmento</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-full justify-between text-xs font-normal",
+                                filtroSegmento.size === 0 && "text-muted-foreground"
+                              )}
+                            >
+                              <span className="truncate">
+                                {filtroSegmento.size === 0
+                                  ? "Todos"
+                                  : filtroSegmento.size === 1
+                                    ? [...filtroSegmento][0] || "—"
+                                    : `${filtroSegmento.size} selecionados`}
+                              </span>
+                              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[260px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar..." className="h-9 text-xs" />
+                              <CommandList>
+                                <CommandEmpty className="py-3 text-xs">Nenhum resultado.</CommandEmpty>
+                                <CommandGroup>
+                                  {segmentosUnicos.map((s) => {
+                                    const sel = filtroSegmento.has(s);
+                                    return (
+                                      <CommandItem
+                                        key={s}
+                                        value={s}
+                                        onSelect={() => {
+                                          const next = new Set(filtroSegmento);
+                                          if (next.has(s)) next.delete(s);
+                                          else next.add(s);
+                                          setFiltroSegmento(next);
+                                        }}
+                                        className="text-xs cursor-pointer"
+                                      >
+                                        <div className={cn(
+                                          "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                                          sel ? "bg-primary text-primary-foreground" : "opacity-50"
+                                        )}>
+                                          {sel && <Check className="h-3 w-3" />}
+                                        </div>
+                                        <span className="truncate">{s}</span>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          Range de Data de Captação
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "h-8 flex-1 justify-start text-xs font-normal",
+                                  !filtroDataDe && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="h-3 w-3 mr-1.5 shrink-0" />
+                                {filtroDataDe
+                                  ? format(filtroDataDe, "dd/MM/yy", { locale: ptBR })
+                                  : "De"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={filtroDataDe}
+                                onSelect={setFiltroDataDe}
+                                locale={ptBR}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <span className="text-muted-foreground text-xs shrink-0">–</span>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "h-8 flex-1 justify-start text-xs font-normal",
+                                  !filtroDataAte && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="h-3 w-3 mr-1.5 shrink-0" />
+                                {filtroDataAte
+                                  ? format(filtroDataAte, "dd/MM/yy", { locale: ptBR })
+                                  : "Até"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="end">
+                              <Calendar
+                                mode="single"
+                                selected={filtroDataAte}
+                                onSelect={setFiltroDataAte}
+                                locale={ptBR}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          Localização
+                        </label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-full justify-between text-xs font-normal",
+                                filtroLocalizacao.size === 0 && "text-muted-foreground"
+                              )}
+                            >
+                              <span className="truncate">
+                                {filtroLocalizacao.size === 0
+                                  ? "Todas"
+                                  : filtroLocalizacao.size === 1
+                                    ? [...filtroLocalizacao][0] || "—"
+                                    : `${filtroLocalizacao.size} selecionadas`}
+                              </span>
+                              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[260px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar..." className="h-9 text-xs" />
+                              <CommandList>
+                                <CommandEmpty className="py-3 text-xs">Nenhum resultado.</CommandEmpty>
+                                <CommandGroup>
+                                  {localizacoesUnicas.map((l) => {
+                                    const sel = filtroLocalizacao.has(l);
+                                    return (
+                                      <CommandItem
+                                        key={l}
+                                        value={l}
+                                        onSelect={() => {
+                                          const next = new Set(filtroLocalizacao);
+                                          if (next.has(l)) next.delete(l);
+                                          else next.add(l);
+                                          setFiltroLocalizacao(next);
+                                        }}
+                                        className="text-xs cursor-pointer"
+                                      >
+                                        <div className={cn(
+                                          "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                                          sel ? "bg-primary text-primary-foreground" : "opacity-50"
+                                        )}>
+                                          {sel && <Check className="h-3 w-3" />}
+                                        </div>
+                                        <span className="truncate">{l}</span>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      {(filtroUsuario.size > 0 ||
+                        filtroOrigem.size > 0 ||
+                        filtroSegmento.size > 0 ||
+                        filtroLocalizacao.size > 0 ||
+                        filtroDataDe ||
+                        filtroDataAte) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          onClick={() => {
+                            setFiltroUsuario(new Set());
+                            setFiltroOrigem(new Set());
+                            setFiltroSegmento(new Set());
+                            setFiltroLocalizacao(new Set());
+                            setFiltroDataDe(undefined);
+                            setFiltroDataAte(undefined);
+                          }}
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Limpar filtros
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <button
+                  onClick={() => setConfigDialogOpen(true)}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors"
+                  title="Configurar funil"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                </button>
               </div>
             )}
             <Button
@@ -592,6 +1104,7 @@ const Funil = () => {
               size="sm"
               onClick={carregarDados}
               disabled={loading}
+              className="bg-white"
             >
               <RefreshCw
                 className={cn("h-4 w-4 mr-2", loading && "animate-spin")}
@@ -694,9 +1207,9 @@ const Funil = () => {
                         lead={lead}
                         isDragged={draggedId === lead.id}
                         onPointerDown={handlePointerDown}
-                        onClick={() => navigate(`/lead/${lead.id}`)}
-                        onEdit={() => abrirEditarLead(lead)}
-                        onRemove={() => removerDoFunil(lead.id)}
+                        onNavigate={handleCardNavigate}
+                        onEdit={abrirEditarLead}
+                        onRemove={handleCardRemove}
                       />
                     ))}
 
@@ -950,6 +1463,289 @@ const Funil = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dialog: configuração do funil - Todas as Colunas */}
+      <Dialog
+        open={configDialogOpen}
+        onOpenChange={(open) => {
+          setConfigDialogOpen(open);
+          if (!open) {
+            setEditandoEtapa(null);
+            setNovaEtapaNome("");
+            setNovaEtapaCor("#6b7280");
+            setNovaColunaExpandida(false);
+            setConfigDragFrom(null);
+            setConfigDragOver(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Todas as Colunas</DialogTitle>
+            <DialogDescription>
+              Arraste as colunas para reordená-las
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {etapas.map((e, idx) => (
+              <div
+                key={e.id}
+                onDragOver={(ev) => {
+                  ev.preventDefault();
+                  ev.dataTransfer.dropEffect = "move";
+                  setConfigDragOver(idx);
+                }}
+                onDragLeave={() => setConfigDragOver(null)}
+                onDrop={async (ev) => {
+                  ev.preventDefault();
+                  setConfigDragFrom(null);
+                  setConfigDragOver(null);
+                  const fromStr = ev.dataTransfer.getData("text/plain");
+                  const from = fromStr === "" ? configDragFrom : parseInt(fromStr, 10);
+                  const to = idx;
+                  if (Number.isNaN(from) || from === to) return;
+                  const reordered = [...etapas];
+                  const [item] = reordered.splice(from, 1);
+                  reordered.splice(to, 0, item);
+                  const updates = reordered.map((x, i) => ({ id: x.id, ordem: i }));
+                  setLoadingConfig(true);
+                  try {
+                    await reordenarFunilEtapas(updates);
+                    setEtapas(reordered.map((x, i) => ({ ...x, ordem: i })));
+                    toast({ title: "Ordem atualizada" });
+                  } catch (err) {
+                    toast({
+                      title: "Erro ao reordenar",
+                      description: err instanceof Error ? err.message : "Erro",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setLoadingConfig(false);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-3 py-2.5 px-3 rounded-lg border bg-white transition-colors",
+                  configDragFrom === idx && "opacity-50",
+                  configDragOver === idx && configDragFrom !== idx && "ring-2 ring-primary/30"
+                )}
+              >
+                <div
+                  draggable
+                  onDragStart={(ev) => {
+                    ev.dataTransfer.setData("text/plain", String(idx));
+                    ev.dataTransfer.effectAllowed = "move";
+                    setConfigDragFrom(idx);
+                  }}
+                  onDragEnd={() => {
+                    setConfigDragFrom(null);
+                    setConfigDragOver(null);
+                  }}
+                  className="cursor-grab active:cursor-grabbing touch-none shrink-0"
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </div>
+                {editandoEtapa?.id === e.id ? (
+                  <>
+                    <div
+                      className="w-5 h-5 rounded shrink-0 border border-border"
+                      style={{ backgroundColor: editEtapaCor }}
+                    />
+                    <Input
+                      value={editEtapaNome}
+                      onChange={(ev) => setEditEtapaNome(ev.target.value)}
+                      placeholder="Nome"
+                      className="h-8 text-sm flex-1 min-w-[120px] border-primary/30 focus-visible:ring-primary"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        if (!editEtapaNome.trim()) return;
+                        setLoadingConfig(true);
+                        try {
+                          const atualizada = await atualizarFunilEtapa(e.id, {
+                            nome: editEtapaNome.trim(),
+                            cor: editEtapaCor,
+                          });
+                          setEtapas((prev) =>
+                            prev.map((x) => (x.id === e.id ? atualizada : x))
+                          );
+                          setEditandoEtapa(null);
+                          toast({ title: "Etapa atualizada" });
+                        } catch (err) {
+                          toast({
+                            title: "Erro ao atualizar",
+                            description: err instanceof Error ? err.message : "Erro",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setLoadingConfig(false);
+                        }
+                      }}
+                      disabled={loadingConfig}
+                    >
+                      Salvar
+                    </Button>
+                    <button
+                      type="button"
+                      data-no-drag
+                      onClick={() => setEditandoEtapa(null)}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className="w-5 h-5 rounded-full shrink-0"
+                      style={{ backgroundColor: e.cor || "#6b7280" }}
+                    />
+                    <span className="flex-1 text-sm font-medium text-foreground">{e.nome}</span>
+                    <button
+                      type="button"
+                      data-no-drag
+                      onClick={() => {
+                        setEditandoEtapa(e);
+                        setEditEtapaNome(e.nome);
+                        setEditEtapaCor(e.cor || "#6b7280");
+                      }}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    {e.ordem !== 0 && (
+                      <button
+                        type="button"
+                        data-no-drag
+                        onClick={() => setEtapaExcluirConfirm(e)}
+                        className="p-1.5 rounded hover:bg-muted text-destructive hover:text-destructive"
+                        title="Excluir etapa (leads irão para etapa ordem 0)"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+            {novaColunaExpandida ? (
+              <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg border-2 border-dashed border-primary/40 bg-white">
+                <Input
+                  type="color"
+                  value={novaEtapaCor}
+                  onChange={(ev) => setNovaEtapaCor(ev.target.value)}
+                  className="w-8 h-8 p-1 cursor-pointer shrink-0"
+                  title="Cor"
+                />
+                <Input
+                  value={novaEtapaNome}
+                  onChange={(ev) => setNovaEtapaNome(ev.target.value)}
+                  placeholder="Nome da coluna"
+                  className="h-8 text-sm flex-1 min-w-[140px]"
+                />
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!novaEtapaNome.trim() || !dbUser) return;
+                    const maxOrdem = Math.max(-1, ...etapas.map((x) => x.ordem));
+                    setLoadingConfig(true);
+                    try {
+                      const nova = await criarFunilEtapa({
+                        nome: novaEtapaNome.trim(),
+                        ordem: maxOrdem + 1,
+                        cor: novaEtapaCor,
+                        user_id: dbUser.id,
+                        empresa_id: dbUser.empresa_id,
+                      });
+                      setEtapas((prev) => [...prev, nova].sort((a, b) => a.ordem - b.ordem));
+                      setNovaEtapaNome("");
+                      setNovaEtapaCor("#6b7280");
+                      setNovaColunaExpandida(false);
+                      toast({ title: "Coluna criada" });
+                    } catch (err) {
+                      toast({
+                        title: "Erro ao criar coluna",
+                        description: err instanceof Error ? err.message : "Erro",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setLoadingConfig(false);
+                    }
+                  }}
+                  disabled={loadingConfig || !novaEtapaNome.trim()}
+                >
+                  Salvar
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNovaColunaExpandida(false);
+                    setNovaEtapaNome("");
+                    setNovaEtapaCor("#6b7280");
+                  }}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setNovaColunaExpandida(true)}
+                className="flex items-center gap-2 w-full py-2.5 text-primary hover:text-primary/80 font-medium text-sm transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Nova Coluna
+              </button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* AlertDialog: confirmar exclusão de etapa */}
+      <AlertDialog
+        open={!!etapaExcluirConfirm}
+        onOpenChange={(open) => !open && setEtapaExcluirConfirm(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir etapa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os leads que estão na etapa &quot;{etapaExcluirConfirm?.nome}&quot; serão
+              movidos para a etapa de ordem 0 (Novo Lead). Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                const etapa = etapaExcluirConfirm;
+                if (!etapa) return;
+                setEtapaExcluirConfirm(null);
+                setLoadingConfig(true);
+                try {
+                  await deletarFunilEtapa(etapa.id);
+                  setEtapas((prev) => prev.filter((x) => x.id !== etapa.id));
+                  setConfigDialogOpen(false);
+                  toast({ title: "Etapa excluída" });
+                  carregarDados();
+                } catch (err) {
+                  toast({
+                    title: "Erro ao excluir etapa",
+                    description: err instanceof Error ? err.message : "Erro",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setLoadingConfig(false);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 };
@@ -960,16 +1756,16 @@ interface KanbanCardProps {
   lead: LeadCaptadoComTarefas;
   isDragged: boolean;
   onPointerDown: (e: React.PointerEvent, id: number) => void;
-  onClick: () => void;
-  onEdit: () => void;
-  onRemove: () => void;
+  onNavigate: (leadId: number) => void;
+  onEdit: (lead: LeadCaptadoComTarefas) => void;
+  onRemove: (leadId: number) => void;
 }
 
-function KanbanCard({
+const KanbanCard = memo(function KanbanCard({
   lead,
   isDragged,
   onPointerDown,
-  onClick,
+  onNavigate,
   onEdit,
   onRemove,
 }: KanbanCardProps) {
@@ -1001,7 +1797,7 @@ function KanbanCard({
       }}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
-        onClick();
+        onNavigate(lead.id);
       }}
       className={cn(
         "group rounded-lg border border-border bg-card p-3.5 cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md hover:border-border/80 select-none touch-none",
@@ -1029,7 +1825,7 @@ function KanbanCard({
                 data-no-drag
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit();
+                  onEdit(lead);
                 }}
               >
                 <Pencil className="h-3.5 w-3.5 mr-2" />
@@ -1040,7 +1836,7 @@ function KanbanCard({
                 className="text-red-600"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onRemove();
+                  onRemove(lead.id);
                 }}
               >
                 <X className="h-3.5 w-3.5 mr-2" />
@@ -1090,10 +1886,15 @@ function KanbanCard({
               <span className="truncate">{proximaTarefa.descricao}</span>
               {proximaTarefa.data_vencimento && (
                 <span className="ml-auto flex-shrink-0 font-medium">
-                  {new Date(proximaTarefa.data_vencimento).toLocaleDateString(
-                    "pt-BR",
-                    { day: "2-digit", month: "2-digit" }
-                  )}
+                  {(() => {
+                    const d = new Date(proximaTarefa.data_vencimento);
+                    const h = d.getHours();
+                    const m = d.getMinutes();
+                    const soPadrao = (h === 12 && m === 0) || (h === 0 && m === 0);
+                    return soPadrao
+                      ? d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+                      : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+                  })()}
                 </span>
               )}
             </div>
@@ -1113,6 +1914,6 @@ function KanbanCard({
       </div>
     </div>
   );
-}
+});
 
 export default Funil;

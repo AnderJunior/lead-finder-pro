@@ -35,8 +35,17 @@ export function AppSidebar() {
   const [navegacaoOpen, setNavegacaoOpen] = useState(navegacaoActive);
   const [supportOpen, setSupportOpen] = useState(false);
 
-  const [empresaLogo, setEmpresaLogo] = useState<string | null>(null);
-  const [empresaNome, setEmpresaNome] = useState<string | null>(null);
+  const STORAGE_KEY = "empresa_config";
+  const [empresaConfig, setEmpresaConfig] = useState<{ logo_url: string | null; nome: string | null } | null>(() => {
+    if (!dbUser?.empresa_id || typeof sessionStorage === "undefined") return null;
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { empresa_id: number; logo_url?: string | null; nome?: string | null };
+      if (parsed.empresa_id !== dbUser.empresa_id) return null;
+      return { logo_url: parsed.logo_url ?? null, nome: parsed.nome ?? null };
+    } catch { return null; }
+  });
 
   useEffect(() => {
     if (!dbUser?.empresa_id) return;
@@ -47,8 +56,16 @@ export function AppSidebar() {
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
-          setEmpresaLogo(data.logo_url || null);
-          setEmpresaNome(data.nome || null);
+          const logo = data.logo_url || null;
+          const nome = data.nome || null;
+          setEmpresaConfig({ logo_url: logo, nome });
+          try {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+              empresa_id: dbUser.empresa_id,
+              logo_url: logo,
+              nome,
+            }));
+          } catch { /* ignore */ }
         }
       });
   }, [dbUser?.empresa_id]);
@@ -72,10 +89,10 @@ export function AppSidebar() {
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-sidebar flex flex-col">
       {/* Logo */}
       <div className="flex items-center justify-center px-6 py-5 border-b border-border">
-        {empresaLogo ? (
+        {empresaConfig?.logo_url ? (
           <img
-            src={empresaLogo}
-            alt={empresaNome || "ClientScout"}
+            src={empresaConfig.logo_url}
+            alt={empresaConfig.nome || "ClientScout"}
             className="h-9 max-w-[180px] object-contain"
           />
         ) : (

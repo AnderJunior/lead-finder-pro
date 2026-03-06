@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, parse, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   ArrowLeft,
+  ArrowUp,
   Building2,
   Phone,
   Mail,
@@ -59,6 +60,7 @@ import {
   deletarFunilTarefa,
   fetchLeadAnotacoes,
   criarLeadAnotacao,
+  atualizarLeadAnotacao,
   deletarLeadAnotacao,
   type LeadCaptadoComTarefas,
   type FunilEtapa,
@@ -91,12 +93,64 @@ const formatarValor = (valor: number) => {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-const tarefaVencida = (t: FunilTarefa) =>
-  !t.concluida && t.data_vencimento && new Date(t.data_vencimento) < new Date();
+const tarefaVencida = (t: FunilTarefa) => {
+  if (t.concluida || !t.data_vencimento) return false;
+  const d = parseDataVencimento(t.data_vencimento);
+  return d !== null && d < new Date();
+};
 
 const tarefaHoje = (t: FunilTarefa) => {
   if (!t.data_vencimento || t.concluida) return false;
-  return new Date(t.data_vencimento).toDateString() === new Date().toDateString();
+  const d = parseDataVencimento(t.data_vencimento);
+  return d && isValid(d) && d.toDateString() === new Date().toDateString();
+};
+
+const parseDataVencimento = (s: string | null | undefined): Date | null => {
+  if (!s || !String(s).trim()) return null;
+  const str = String(s).trim();
+  const d = str.includes("T") ? new Date(str) : new Date(str + "T12:00:00");
+  return isValid(d) ? d : null;
+};
+
+const formatDataVencimento = (s: string | null | undefined, incluirHora = false): string => {
+  const d = parseDataVencimento(s);
+  if (!d) return "";
+  return incluirHora ? format(d, "dd/MM/yyyy HH:mm", { locale: ptBR }) : format(d, "dd/MM/yyyy", { locale: ptBR });
+};
+
+const parseDataHoraInput = (v: string): string => {
+  const trimmed = v.trim();
+  if (!trimmed) return "";
+  const formatsComHora = [
+    "dd/MM/yyyy HH:mm",
+    "d/M/yyyy HH:mm",
+    "dd/MM/yy HH:mm",
+    "d/M/yy HH:mm",
+    "dd/MM/yyyy H:mm",
+  ];
+  for (const fmt of formatsComHora) {
+    try {
+      const d = parse(trimmed, fmt, new Date(), { locale: ptBR });
+      if (isValid(d)) return format(d, "yyyy-MM-dd'T'HH:mm:ss");
+    } catch {
+      /* try next */
+    }
+  }
+  const formatsSoData = ["dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy", "d/M/yy"];
+  for (const fmt of formatsSoData) {
+    try {
+      const d = parse(trimmed, fmt, new Date(), { locale: ptBR });
+      if (isValid(d)) return format(d, "yyyy-MM-dd") + "T12:00:00";
+    } catch {
+      /* try next */
+    }
+  }
+  return "";
+};
+
+const formatDataHoraParaInput = (s: string | null | undefined): string => {
+  const d = parseDataVencimento(s);
+  return d ? format(d, "dd/MM/yyyy HH:mm", { locale: ptBR }) : "";
 };
 
 const LeadDetails = () => {
@@ -142,10 +196,12 @@ const LeadDetails = () => {
 
   // Tarefas
   const [novaTarefaTexto, setNovaTarefaTexto] = useState("");
-  const [novaTarefaData, setNovaTarefaData] = useState("");
+  const [prazoInputValue, setPrazoInputValue] = useState("");
 
   // Anotações
   const [novaAnotacao, setNovaAnotacao] = useState("");
+  const [editandoAnotacaoId, setEditandoAnotacaoId] = useState<number | null>(null);
+  const [editAnotacaoTexto, setEditAnotacaoTexto] = useState("");
 
   const carregarDados = useCallback(async (silent = false) => {
     if (!id) return;
@@ -355,13 +411,13 @@ const LeadDetails = () => {
       const tarefa = await criarFunilTarefa({
         lead_id: lead.id,
         descricao: novaTarefaTexto.trim(),
-        data_vencimento: novaTarefaData || null,
+        data_vencimento: parseDataHoraInput(prazoInputValue) || null,
         concluida: false,
         empresa_id: dbUser.empresa_id,
       });
       setLead({ ...lead, funil_tarefas: [...lead.funil_tarefas, tarefa] });
       setNovaTarefaTexto("");
-      setNovaTarefaData("");
+      setPrazoInputValue("");
       toast({ title: "Tarefa criada" });
     } catch (err) {
       toast({
@@ -373,18 +429,27 @@ const LeadDetails = () => {
   };
 
   const toggleTarefa = async (tarefa: FunilTarefa) => {
-    if (!lead) return;
+    if (!lead || !dbUser) return;
     const novoConcluida = !tarefa.concluida;
     try {
-      await atualizarFunilTarefa(tarefa.id, { concluida: novoConcluida });
+      await atualizarFunilTarefa(tarefa.id, { concluida: novoConcluida }, novoConcluida ? dbUser.id : undefined);
       setLead({
         ...lead,
         funil_tarefas: lead.funil_tarefas.map((t) =>
           t.id === tarefa.id
-            ? { ...t, concluida: novoConcluida, concluida_em: novoConcluida ? new Date().toISOString() : null }
+            ? {
+                ...t,
+                concluida: novoConcluida,
+                concluida_em: novoConcluida ? new Date().toISOString() : null,
+                concluida_por_user_id: novoConcluida ? dbUser.id : null,
+                concluida_por_nome: novoConcluida ? (dbUser.nome ?? dbUser.email) : null,
+              }
             : t
         ),
       });
+      if (!novoConcluida) {
+        toast({ title: "Tarefa retornada para pendentes" });
+      }
     } catch {
       toast({ title: "Erro ao atualizar tarefa", variant: "destructive" });
     }
@@ -400,6 +465,25 @@ const LeadDetails = () => {
       });
     } catch {
       toast({ title: "Erro ao excluir tarefa", variant: "destructive" });
+    }
+  };
+
+  const atualizarTarefa = async (
+    tarefaId: number,
+    updates: { descricao?: string; data_vencimento?: string | null }
+  ) => {
+    if (!lead) return;
+    try {
+      await atualizarFunilTarefa(tarefaId, updates);
+      setLead({
+        ...lead,
+        funil_tarefas: lead.funil_tarefas.map((t) =>
+          t.id === tarefaId ? { ...t, ...updates } : t
+        ),
+      });
+      toast({ title: "Tarefa atualizada" });
+    } catch {
+      toast({ title: "Erro ao atualizar tarefa", variant: "destructive" });
     }
   };
 
@@ -430,8 +514,19 @@ const LeadDetails = () => {
     try {
       await deletarLeadAnotacao(anotacaoId);
       setAnotacoes(anotacoes.filter((a) => a.id !== anotacaoId));
+      toast({ title: "Anotação excluída" });
     } catch {
       toast({ title: "Erro ao excluir anotação", variant: "destructive" });
+    }
+  };
+
+  const atualizarAnotacao = async (anotacaoId: number, novoTexto: string) => {
+    try {
+      await atualizarLeadAnotacao(anotacaoId, novoTexto);
+      setAnotacoes(anotacoes.map((a) => (a.id === anotacaoId ? { ...a, texto: novoTexto } : a)));
+      toast({ title: "Anotação atualizada" });
+    } catch {
+      toast({ title: "Erro ao atualizar anotação", variant: "destructive" });
     }
   };
 
@@ -1119,7 +1214,7 @@ const LeadDetails = () => {
           {/* Conteúdo principal - Tabs */}
           <div className="space-y-4">
             {/* Próximas tarefas - seção destacada */}
-            <div className="card-gradient rounded-xl border border-border p-5">
+            <div id="tarefas" className="card-gradient rounded-xl border border-border p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <CalendarClock className="h-4 w-4 text-primary" />
@@ -1137,10 +1232,11 @@ const LeadDetails = () => {
               ) : (
                 <div className="space-y-2 mb-4">
                   {tarefasPendentes
-                    .sort((a, b) =>
-                      new Date(a.data_vencimento ?? "9999").getTime() -
-                      new Date(b.data_vencimento ?? "9999").getTime()
-                    )
+                    .sort((a, b) => {
+                      const da = parseDataVencimento(a.data_vencimento) ?? new Date(9999, 11, 31);
+                      const db = parseDataVencimento(b.data_vencimento) ?? new Date(9999, 11, 31);
+                      return da.getTime() - db.getTime();
+                    })
                     .slice(0, 5)
                     .map((tarefa) => (
                       <TarefaItem
@@ -1148,6 +1244,7 @@ const LeadDetails = () => {
                         tarefa={tarefa}
                         onToggle={toggleTarefa}
                         onRemove={removerTarefa}
+                        onUpdate={atualizarTarefa}
                       />
                     ))}
                   {tarefasPendentes.length > 5 && (
@@ -1159,44 +1256,65 @@ const LeadDetails = () => {
               )}
 
               {/* Criar tarefa inline */}
-              <div className="flex gap-2 pt-2 border-t border-border/50">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border/50 items-center">
                 <Input
                   placeholder="Nova tarefa..."
                   value={novaTarefaTexto}
                   onChange={(e) => setNovaTarefaTexto(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && adicionarTarefa()}
-                  className="text-sm"
+                  className="text-sm flex-1 min-w-[140px]"
                 />
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "w-[120px] justify-start text-xs font-normal flex-shrink-0",
-                        !novaTarefaData && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />
-                      {novaTarefaData
-                        ? format(new Date(novaTarefaData + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })
-                        : "Prazo"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={novaTarefaData ? new Date(novaTarefaData + "T12:00:00") : undefined}
-                      onSelect={(d) => setNovaTarefaData(d ? format(d, "yyyy-MM-dd") : "")}
-                      locale={ptBR}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <div className="flex gap-1.5 flex-shrink-0 items-center">
+                  <Input
+                    placeholder="dd/mm/aaaa HH:mm"
+                    value={prazoInputValue}
+                    onChange={(e) => setPrazoInputValue(e.target.value)}
+                    onBlur={(e) => {
+                      const v = (e.target as HTMLInputElement).value.trim();
+                      if (!v) return;
+                      const iso = parseDataHoraInput(v);
+                      if (iso) {
+                        setPrazoInputValue(formatDataHoraParaInput(iso));
+                      } else {
+                        setPrazoInputValue("");
+                      }
+                    }}
+                    className="text-xs h-8 w-[155px] flex-shrink-0"
+                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 flex-shrink-0"
+                        title="Selecionar data no calendário"
+                      >
+                        <CalendarIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={parseDataVencimento(parseDataHoraInput(prazoInputValue) || "") ?? undefined}
+                        onSelect={(d) => {
+                          if (d) {
+                            const horaAtual = prazoInputValue.match(/\d{1,2}:\d{2}$/)?.[0];
+                            setPrazoInputValue(format(d, "dd/MM/yyyy", { locale: ptBR }) + (horaAtual ? ` ${horaAtual}` : " 12:00"));
+                          } else {
+                            setPrazoInputValue("");
+                          }
+                        }}
+                        locale={ptBR}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 <Button
                   size="sm"
                   onClick={adicionarTarefa}
                   disabled={!novaTarefaTexto.trim()}
+                  className="flex-shrink-0"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Criar tarefa
@@ -1205,15 +1323,15 @@ const LeadDetails = () => {
             </div>
 
             {/* Tabs: Anotações, Tarefas */}
-            <Tabs defaultValue="anotacoes" className="w-full">
+            <Tabs defaultValue="historico" className="w-full">
               <TabsList className="bg-muted/50 w-full justify-start">
-                <TabsTrigger value="anotacoes" className="text-sm gap-1.5">
-                  <MessageSquarePlus className="h-3.5 w-3.5" />
-                  Anotações
-                </TabsTrigger>
                 <TabsTrigger value="historico" className="text-sm gap-1.5">
                   <History className="h-3.5 w-3.5" />
                   Histórico
+                </TabsTrigger>
+                <TabsTrigger value="anotacoes" className="text-sm gap-1.5">
+                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                  Anotações
                 </TabsTrigger>
               </TabsList>
 
@@ -1246,51 +1364,123 @@ const LeadDetails = () => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {anotacoes.map((anotacao) => (
-                      <div
-                        key={anotacao.id}
-                        className="card-gradient rounded-xl border border-border p-4 group"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0">
-                                {(anotacao.user_nome ?? "U").charAt(0).toUpperCase()}
+                    {anotacoes.map((anotacao) => {
+                      const editandoEsta = editandoAnotacaoId === anotacao.id;
+                      return (
+                        <div
+                          key={anotacao.id}
+                          className="card-gradient rounded-xl border border-border p-4 group"
+                        >
+                          {editandoEsta ? (
+                            <div className="space-y-3">
+                              <Textarea
+                                value={editAnotacaoTexto}
+                                onChange={(e) => setEditAnotacaoTexto(e.target.value)}
+                                rows={3}
+                                className="text-sm"
+                              />
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    setEditandoAnotacaoId(null);
+                                    setEditAnotacaoTexto("");
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  disabled={!editAnotacaoTexto.trim()}
+                                  onClick={() => {
+                                    atualizarAnotacao(anotacao.id, editAnotacaoTexto.trim());
+                                    setEditandoAnotacaoId(null);
+                                    setEditAnotacaoTexto("");
+                                  }}
+                                >
+                                  <Save className="h-3 w-3 mr-1" />
+                                  Salvar
+                                </Button>
                               </div>
-                              <span className="text-xs font-medium text-foreground">
-                                {anotacao.user_nome ?? "Usuário"}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatarData(anotacao.created_at)}
-                              </span>
                             </div>
-                            <p className="text-sm text-foreground whitespace-pre-wrap pl-8">
-                              {anotacao.texto}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => removerAnotacao(anotacao.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-500/10 flex-shrink-0"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-                          </button>
+                          ) : (
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0">
+                                    {(anotacao.user_nome ?? "U").charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="text-xs font-medium text-foreground">
+                                    {anotacao.user_nome ?? "Usuário"}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatarData(anotacao.created_at)}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-foreground whitespace-pre-wrap pl-8">
+                                  {anotacao.texto}
+                                </p>
+                              </div>
+                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setEditandoAnotacaoId(anotacao.id);
+                                    setEditAnotacaoTexto(anotacao.texto);
+                                  }}
+                                  className="p-1 rounded hover:bg-muted"
+                                  title="Editar anotação"
+                                >
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                </button>
+                                <button
+                                  onClick={() => removerAnotacao(anotacao.id)}
+                                  className="p-1 rounded hover:bg-red-500/10"
+                                  title="Excluir anotação"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
 
               {/* Tab: Histórico */}
-              <TabsContent value="historico" className="mt-4">
+              <TabsContent value="historico" className="mt-4 space-y-4">
+                <div className="card-gradient rounded-xl border border-border p-5 space-y-3">
+                  <Textarea
+                    placeholder="Escreva uma anotação..."
+                    value={novaAnotacao}
+                    onChange={(e) => setNovaAnotacao(e.target.value)}
+                    rows={3}
+                    className="text-sm"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={adicionarAnotacao}
+                      disabled={!novaAnotacao.trim()}
+                    >
+                      <MessageSquarePlus className="h-4 w-4 mr-2" />
+                      Criar anotação
+                    </Button>
+                  </div>
+                </div>
                 {(() => {
-                  type TimelineItem = { date: string; type: "captacao" | "movimentacao" | "tarefa" | "anotacao" | "status"; label: React.ReactNode };
+                  type TimelineItem = { date: string; type: "captacao" | "movimentacao" | "tarefa" | "anotacao" | "status"; label: React.ReactNode; anotacao?: LeadAnotacao; tarefa?: FunilTarefa };
                   const items: TimelineItem[] = [];
 
                   items.push({
                     date: lead.data_captacao,
                     type: "captacao",
-                    label: <>Lead captado</>,
+                    label: <><strong className="text-foreground">{lead.captor_nome ?? "Usuário"}</strong> captou o lead</>,
                   });
 
                   logs.forEach((log) => {
@@ -1298,7 +1488,7 @@ const LeadDetails = () => {
                     items.push({
                       date: log.data_entrada,
                       type: "movimentacao",
-                      label: <>Movido para a etapa <strong className="text-foreground">{nomeEtapa}</strong></>,
+                      label: <><strong className="text-foreground">{log.user_nome ?? "Usuário"}</strong> moveu para a etapa <strong className="text-foreground">{nomeEtapa}</strong></>,
                     });
                   });
 
@@ -1308,7 +1498,8 @@ const LeadDetails = () => {
                       items.push({
                         date: t.concluida_em!,
                         type: "tarefa",
-                        label: <>Tarefa concluída: <strong className="text-foreground">{t.descricao}</strong></>,
+                        label: <><strong className="text-foreground">{t.concluida_por_nome ?? "Usuário"}</strong> concluiu a tarefa <strong className="text-foreground">{t.descricao}</strong></>,
+                        tarefa: t,
                       });
                     });
 
@@ -1316,7 +1507,8 @@ const LeadDetails = () => {
                     items.push({
                       date: a.created_at,
                       type: "anotacao",
-                      label: <><strong className="text-foreground">{a.user_nome ?? "Usuário"}</strong> adicionou uma anotação</>,
+                      label: <><strong className="text-foreground">{a.user_nome ?? "Usuário"}</strong> anotou: {a.texto}</>,
+                      anotacao: a,
                     });
                   });
 
@@ -1343,18 +1535,97 @@ const LeadDetails = () => {
                       {items.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-8 italic">Nenhum registro.</p>
                       ) : (
-                        items.map((item, i) => (
-                          <div key={i} className="flex gap-3 py-2.5">
-                            <div className="flex flex-col items-center pt-1.5">
-                              <div className={cn("h-2 w-2 rounded-full flex-shrink-0", colorMap[item.type])} />
-                              {i < items.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+                        items.map((item, i) => {
+                          const isAnotacao = item.type === "anotacao" && item.anotacao;
+                          const isTarefa = item.type === "tarefa";
+                          const editandoEsta = isAnotacao && editandoAnotacaoId === item.anotacao!.id;
+                          return (
+                            <div key={i} className={cn("flex gap-3 py-2.5", isTarefa && "group")}>
+                              <div className="flex flex-col items-center pt-1.5">
+                                <div className={cn("h-2 w-2 rounded-full flex-shrink-0", colorMap[item.type])} />
+                                {i < items.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+                              </div>
+                              <div className={cn("flex-1 min-w-0 pb-1", isAnotacao && "group")}>
+                                {editandoEsta ? (
+                                  <div className="space-y-2">
+                                    <Textarea
+                                      value={editAnotacaoTexto}
+                                      onChange={(e) => setEditAnotacaoTexto(e.target.value)}
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    <div className="flex gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs"
+                                        onClick={() => {
+                                          setEditandoAnotacaoId(null);
+                                          setEditAnotacaoTexto("");
+                                        }}
+                                      >
+                                        Cancelar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        className="h-7 text-xs"
+                                        disabled={!editAnotacaoTexto.trim()}
+                                        onClick={() => {
+                                          atualizarAnotacao(item.anotacao!.id, editAnotacaoTexto.trim());
+                                          setEditandoAnotacaoId(null);
+                                          setEditAnotacaoTexto("");
+                                        }}
+                                      >
+                                        <Save className="h-3 w-3 mr-1" />
+                                        Salvar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-sm text-muted-foreground leading-snug flex-1 min-w-0">{item.label}</p>
+                                      {isTarefa && item.tarefa && (
+                                        <button
+                                          onClick={() => {
+                                            toggleTarefa(item.tarefa!);
+                                            document.getElementById("tarefas")?.scrollIntoView({ behavior: "smooth" });
+                                          }}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted flex-shrink-0"
+                                          title="Voltar para lista de tarefas"
+                                        >
+                                          <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
+                                        </button>
+                                      )}
+                                      {isAnotacao && (
+                                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                          <button
+                                            onClick={() => {
+                                              setEditandoAnotacaoId(item.anotacao!.id);
+                                              setEditAnotacaoTexto(item.anotacao!.texto);
+                                            }}
+                                            className="p-1 rounded hover:bg-muted"
+                                            title="Editar anotação"
+                                          >
+                                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                                          </button>
+                                          <button
+                                            onClick={() => removerAnotacao(item.anotacao!.id)}
+                                            className="p-1 rounded hover:bg-red-500/10"
+                                            title="Excluir anotação"
+                                          >
+                                            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">{formatarData(item.date)}</p>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0 pb-1">
-                              <p className="text-sm text-muted-foreground leading-snug">{item.label}</p>
-                              <p className="text-[11px] text-muted-foreground/60 mt-0.5">{formatarData(item.date)}</p>
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   );
@@ -1481,11 +1752,106 @@ function TarefaItem({
   tarefa,
   onToggle,
   onRemove,
+  onUpdate,
 }: {
   tarefa: FunilTarefa;
   onToggle: (t: FunilTarefa) => void;
   onRemove: (id: number) => void;
+  onUpdate: (id: number, updates: { descricao?: string; data_vencimento?: string | null }) => void;
 }) {
+  const [editando, setEditando] = useState(false);
+  const [editDescricao, setEditDescricao] = useState(tarefa.descricao);
+  const [editDataValue, setEditDataValue] = useState(formatDataHoraParaInput(tarefa.data_vencimento));
+  const [editDataNormalized, setEditDataNormalized] = useState<string | null>(tarefa.data_vencimento);
+
+  const salvarEdicao = () => {
+    const descOk = editDescricao.trim();
+    const dataOk = editDataValue.trim() ? parseDataHoraInput(editDataValue) : null;
+    onUpdate(tarefa.id, {
+      descricao: descOk || tarefa.descricao,
+      data_vencimento: dataOk || null,
+    });
+    setEditando(false);
+  };
+
+  const cancelarEdicao = () => {
+    setEditDescricao(tarefa.descricao);
+    setEditDataValue(formatDataHoraParaInput(tarefa.data_vencimento));
+    setEditDataNormalized(tarefa.data_vencimento);
+    setEditando(false);
+  };
+
+  if (editando) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col sm:flex-row gap-2 rounded-lg px-3 py-2.5 text-sm",
+          tarefa.concluida ? "bg-muted/30" : "bg-muted/50"
+        )}
+      >
+        <div className="flex gap-2 flex-1 min-w-0">
+          <Input
+            value={editDescricao}
+            onChange={(e) => setEditDescricao(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && salvarEdicao()}
+            placeholder="Nome da tarefa"
+            className="flex-1 min-w-0 text-sm h-8"
+            autoFocus
+          />
+          <div className="flex gap-1 flex-shrink-0 items-center">
+            <Input
+              placeholder="dd/mm/aaaa HH:mm"
+              value={editDataValue}
+              onChange={(e) => setEditDataValue(e.target.value)}
+              onBlur={(e) => {
+                const v = (e.target as HTMLInputElement).value.trim();
+                const iso = parseDataHoraInput(v);
+                if (iso) {
+                  setEditDataValue(formatDataHoraParaInput(iso));
+                  setEditDataNormalized(iso);
+                }
+              }}
+              className="text-xs h-8 w-[155px]"
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0" title="Calendário">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={parseDataVencimento(editDataNormalized ?? "") ?? undefined}
+                  onSelect={(d) => {
+                    if (d) {
+                      const horaAtual = editDataValue.match(/\d{1,2}:\d{2}$/)?.[0];
+                      setEditDataNormalized(format(d, "yyyy-MM-dd"));
+                      setEditDataValue(format(d, "dd/MM/yyyy", { locale: ptBR }) + (horaAtual ? ` ${horaAtual}` : " 12:00"));
+                    } else {
+                      setEditDataNormalized(null);
+                      setEditDataValue("");
+                    }
+                  }}
+                  locale={ptBR}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+        <div className="flex gap-1 justify-end sm:justify-start">
+          <Button size="sm" variant="ghost" onClick={cancelarEdicao} className="h-7 text-xs">
+            Cancelar
+          </Button>
+          <Button size="sm" onClick={salvarEdicao} className="h-7 text-xs">
+            <Save className="h-3 w-3 mr-1" />
+            Salvar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -1514,29 +1880,45 @@ function TarefaItem({
       >
         {tarefa.descricao}
       </span>
-      {tarefa.data_vencimento && (
-        <span
-          className={cn(
-            "text-xs flex-shrink-0",
-            tarefaVencida(tarefa)
+      <span
+        className={cn(
+          "text-xs flex-shrink-0 min-w-[52px] text-right",
+          parseDataVencimento(tarefa.data_vencimento)
+            ? tarefaVencida(tarefa)
               ? "text-red-500 font-medium"
               : tarefaHoje(tarefa)
                 ? "text-amber-600 font-medium"
                 : "text-muted-foreground"
-          )}
-        >
-          {new Date(tarefa.data_vencimento).toLocaleDateString("pt-BR", {
-            day: "2-digit",
-            month: "2-digit",
-          })}
-        </span>
-      )}
-      <button
-        onClick={() => onRemove(tarefa.id)}
-        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+            : "text-muted-foreground/70 italic"
+        )}
       >
-        <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-      </button>
+        {(() => {
+          const d = parseDataVencimento(tarefa.data_vencimento);
+          if (!d) return "Sem prazo";
+          const hora = format(d, "HH:mm");
+          const soHoraPadrao = hora === "12:00" || hora === "00:00";
+          return soHoraPadrao
+            ? d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+            : format(d, "dd/MM HH:mm", { locale: ptBR });
+        })()}
+      </span>
+      <div className="flex gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => {
+            setEditDescricao(tarefa.descricao);
+            setEditDataValue(formatDataVencimento(tarefa.data_vencimento));
+            setEditDataNormalized(tarefa.data_vencimento);
+            setEditando(true);
+          }}
+          className="p-1 rounded hover:bg-muted"
+          title="Editar tarefa"
+        >
+          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+        <button onClick={() => onRemove(tarefa.id)} className="p-1 rounded hover:bg-red-500/10">
+          <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+        </button>
+      </div>
     </div>
   );
 }
