@@ -363,37 +363,58 @@ export async function deleteEmpresaCompleta(empresaId: number): Promise<void> {
   if (usersErr) throw new Error(usersErr.message);
 
   // 2 — Remover pagamentos vinculados à empresa
-  await client.from("pagamentos").delete().eq("empresa_id", empresaId);
+  const { error: pagErr } = await client.from("pagamentos").delete().eq("empresa_id", empresaId);
+  if (pagErr) throw new Error(`Erro ao remover pagamentos: ${pagErr.message}`);
 
   // 3 — Remover assinaturas vinculadas à empresa
-  await client.from("assinaturas").delete().eq("empresa_id", empresaId);
+  const { error: assErr } = await client.from("assinaturas").delete().eq("empresa_id", empresaId);
+  if (assErr) throw new Error(`Erro ao remover assinaturas: ${assErr.message}`);
 
-  // 4 — Remover leads, buscas, funil (dados operacionais)
-  await Promise.all([
-    client.from("funil_tarefas").delete().eq("empresa_id", empresaId),
-    client.from("funil_logs_movimentacao").delete().eq("empresa_id", empresaId),
-    client.from("funil_etapas").delete().eq("empresa_id", empresaId),
-    client.from("leads_captados").delete().eq("empresa_id", empresaId),
-    client.from("buscas_realizadas").delete().eq("empresa_id", empresaId),
-    client.from("configuracoes_integracoes").delete().eq("empresa_id", empresaId),
-  ]);
+  // 4 — Remover dados do funil (tarefas e logs antes das etapas)
+  const { error: tarefasErr } = await client.from("funil_tarefas").delete().eq("empresa_id", empresaId);
+  if (tarefasErr) throw new Error(`Erro ao remover funil_tarefas: ${tarefasErr.message}`);
 
-  // 5 — Remover registros da tabela users
-  await client.from("users").delete().eq("empresa_id", empresaId);
+  const { error: logsErr } = await client.from("funil_logs_movimentacao").delete().eq("empresa_id", empresaId);
+  if (logsErr) throw new Error(`Erro ao remover funil_logs_movimentacao: ${logsErr.message}`);
 
-  // 6 — Remover usuários do Supabase Auth
+  const { error: etapasErr } = await client.from("funil_etapas").delete().eq("empresa_id", empresaId);
+  if (etapasErr) throw new Error(`Erro ao remover funil_etapas: ${etapasErr.message}`);
+
+  // 5 — Remover leads e buscas
+  const { error: leadsErr } = await client.from("leads_captados").delete().eq("empresa_id", empresaId);
+  if (leadsErr) throw new Error(`Erro ao remover leads_captados: ${leadsErr.message}`);
+
+  const { error: buscasErr } = await client.from("buscas_realizadas").delete().eq("empresa_id", empresaId);
+  if (buscasErr) throw new Error(`Erro ao remover buscas_realizadas: ${buscasErr.message}`);
+
+  // 6 — Remover configurações de integrações
+  const { error: intErr } = await client.from("configuracoes_integracoes").delete().eq("empresa_id", empresaId);
+  if (intErr) throw new Error(`Erro ao remover configuracoes_integracoes: ${intErr.message}`);
+
+  // 7 — Limpar referências de updated_by na configuracoes_empresa (FK para users)
+  await client.from("configuracoes_empresa").update({ updated_by: null }).eq("id", empresaId);
+
+  // 8 — Remover usuários do Supabase Auth (antes de remover da tabela users)
   const authIds = (usuarios ?? []).map((u) => u.auth_id).filter(Boolean);
   for (const authId of authIds) {
-    await client.auth.admin.deleteUser(authId);
+    try {
+      await client.auth.admin.deleteUser(authId);
+    } catch (_) {
+      // Usuário pode já ter sido removido do Auth
+    }
   }
 
-  // 7 — Remover a empresa
+  // 9 — Remover registros da tabela users
+  const { error: delUsersErr } = await client.from("users").delete().eq("empresa_id", empresaId);
+  if (delUsersErr) throw new Error(`Erro ao remover users: ${delUsersErr.message}`);
+
+  // 10 — Remover a empresa (por último, pois users referencia ela)
   const { error: delErr } = await client
     .from("configuracoes_empresa")
     .delete()
     .eq("id", empresaId);
 
-  if (delErr) throw new Error(delErr.message);
+  if (delErr) throw new Error(`Erro ao remover empresa: ${delErr.message}`);
 }
 
 // ─── Empresas ───────────────────────────────────────────────────────
