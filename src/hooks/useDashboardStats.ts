@@ -129,12 +129,13 @@ export function useDashboardStats(): DashboardStats {
       const semanaAnteriorInicio = new Date(semanaAtualInicio);
       semanaAnteriorInicio.setDate(semanaAnteriorInicio.getDate() - 7);
 
+      const eid = dbUser.empresa_id;
       const [leads, etapas, buscas, metasGerais, metasVend, rankTudo, rankDiario, rankSemanal, rankMensal, rankMesAnterior] = await Promise.all([
-        fetchLeadsCaptados(),
-        fetchFunilEtapas(),
-        fetchBuscasRealizadas(),
-        fetchMetas().catch(() => [] as Meta[]),
-        fetchMetasVendedor().catch(() => [] as MetaVendedor[]),
+        fetchLeadsCaptados(eid),
+        fetchFunilEtapas(eid),
+        fetchBuscasRealizadas(eid),
+        fetchMetas(eid).catch(() => [] as Meta[]),
+        fetchMetasVendedor(eid).catch(() => [] as MetaVendedor[]),
         fetchVendedoresRanking(null, null).catch(() => []),
         fetchVendedoresRanking(hoje.toISOString()).catch(() => []),
         fetchVendedoresRanking(semanaAtualInicio.toISOString()).catch(() => []),

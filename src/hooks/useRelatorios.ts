@@ -30,12 +30,10 @@ export interface FunilEtapaStats {
   tempoMedioDias: number;
 }
 
-export interface ConversaoEtapa {
-  de: string;
-  para: string;
+export interface TaxaResposta {
+  totalContatados: number;
+  totalResponderam: number;
   taxa: number;
-  total: number;
-  convertidos: number;
 }
 
 export interface VendedorPerformance {
@@ -76,7 +74,7 @@ export interface LeadsPorLocalizacao {
 export interface RelatorioData {
   loading: boolean;
   funilEtapas: FunilEtapaStats[];
-  conversoes: ConversaoEtapa[];
+  taxaResposta: TaxaResposta;
   taxaConversaoGeral: number;
   valorTotalPipeline: number;
   tempoMedioFechamento: number;
@@ -116,7 +114,7 @@ export function useRelatorios(): RelatorioData {
   const [data, setData] = useState<RelatorioData>({
     loading: true,
     funilEtapas: [],
-    conversoes: [],
+    taxaResposta: { totalContatados: 0, totalResponderam: 0, taxa: 0 },
     taxaConversaoGeral: 0,
     valorTotalPipeline: 0,
     tempoMedioFechamento: 0,
@@ -140,15 +138,16 @@ export function useRelatorios(): RelatorioData {
       const now = new Date();
       const mesAtualInicio = startOfMonth(now);
 
+      const eid = dbUser.empresa_id;
       const [leads, etapas, buscas, logs, metasGerais, metasVend, usuarios, rankMensal] =
         await Promise.all([
-          fetchLeadsCaptados(),
-          fetchFunilEtapas(),
-          fetchBuscasRealizadas(),
-          fetchFunilLogs().catch(() => [] as FunilLogMovimentacao[]),
-          fetchMetas().catch(() => [] as Meta[]),
-          fetchMetasVendedor().catch(() => [] as MetaVendedor[]),
-          fetchUsuariosEmpresa().catch(() => [] as UsuarioEmpresa[]),
+          fetchLeadsCaptados(eid),
+          fetchFunilEtapas(eid),
+          fetchBuscasRealizadas(eid),
+          fetchFunilLogs(eid).catch(() => [] as FunilLogMovimentacao[]),
+          fetchMetas(eid).catch(() => [] as Meta[]),
+          fetchMetasVendedor(eid).catch(() => [] as MetaVendedor[]),
+          fetchUsuariosEmpresa(eid).catch(() => [] as UsuarioEmpresa[]),
           fetchVendedoresRanking(mesAtualInicio.toISOString()).catch(() => []),
         ]);
 
@@ -192,26 +191,46 @@ export function useRelatorios(): RelatorioData {
         };
       });
 
-      const conversoes: ConversaoEtapa[] = [];
-      for (let i = 0; i < etapasOrdenadas.length - 1; i++) {
-        const de = etapasOrdenadas[i];
-        const para = etapasOrdenadas[i + 1];
-        const totalDe = leads.filter((l) => {
-          const etapa = etapas.find((e) => e.id === l.etapa_id);
-          return etapa && etapa.ordem >= de.ordem;
-        }).length;
-        const totalPara = leads.filter((l) => {
-          const etapa = etapas.find((e) => e.id === l.etapa_id);
-          return etapa && etapa.ordem >= para.ordem;
-        }).length;
-        const taxa = totalDe > 0 ? (totalPara / totalDe) * 100 : 0;
-        conversoes.push({
-          de: de.nome,
-          para: para.nome,
-          taxa: Math.round(taxa * 10) / 10,
-          total: totalDe,
-          convertidos: totalPara,
-        });
+      // Monta set de etapas por lead baseado nos logs reais de movimentação
+      const etapasReaisPorLead: Record<number, Set<number>> = {};
+      for (const log of logs) {
+        if (!etapasReaisPorLead[log.lead_id]) {
+          etapasReaisPorLead[log.lead_id] = new Set();
+        }
+        etapasReaisPorLead[log.lead_id].add(log.etapa_id);
+      }
+      // Inclui também a etapa atual de cada lead (caso não tenha log)
+      for (const lead of leads) {
+        if (lead.etapa_id != null) {
+          if (!etapasReaisPorLead[lead.id]) {
+            etapasReaisPorLead[lead.id] = new Set();
+          }
+          etapasReaisPorLead[lead.id].add(lead.etapa_id);
+        }
+      }
+
+      // Mapa de etapa_id → ordem para consulta rápida
+      const ordemPorEtapaId: Record<number, number> = {};
+      for (const et of etapas) {
+        ordemPorEtapaId[et.id] = et.ordem;
+      }
+
+      // Taxa de resposta: leads que entraram em "Cliente Respondeu" dentre os que entraram em "Contato Realizado"
+      const etapaContato = etapasOrdenadas.find((e) => e.ordem === 1);
+      const etapaRespondeu = etapasOrdenadas.find((e) => e.ordem === 2);
+      let taxaResposta: TaxaResposta = { totalContatados: 0, totalResponderam: 0, taxa: 0 };
+      if (etapaContato && etapaRespondeu) {
+        const totalContatados = Object.values(etapasReaisPorLead).filter(
+          (etapasSet) => etapasSet.has(etapaContato.id)
+        ).length;
+        const totalResponderam = Object.values(etapasReaisPorLead).filter(
+          (etapasSet) => etapasSet.has(etapaContato.id) && etapasSet.has(etapaRespondeu.id)
+        ).length;
+        taxaResposta = {
+          totalContatados,
+          totalResponderam,
+          taxa: totalContatados > 0 ? Math.round((totalResponderam / totalContatados) * 1000) / 10 : 0,
+        };
       }
 
       const totalComEtapa = leads.filter((l) => l.etapa_id != null).length;
@@ -350,7 +369,7 @@ export function useRelatorios(): RelatorioData {
       setData({
         loading: false,
         funilEtapas,
-        conversoes,
+        taxaResposta,
         taxaConversaoGeral: Math.round(taxaConversaoGeral * 10) / 10,
         valorTotalPipeline,
         tempoMedioFechamento,

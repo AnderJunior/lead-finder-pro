@@ -211,7 +211,7 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
         }
 
         try {
-          const chaves = await fetchChavesLeadsCaptados();
+          const chaves = await fetchChavesLeadsCaptados(dbUser!.empresa_id);
           const telCaptados = new Set(
             chaves
               .filter((c) => c.telefone)
@@ -360,7 +360,7 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
 
   const refreshCaptados = useCallback(async () => {
     try {
-      const chaves = await fetchChavesLeadsCaptados();
+      const chaves = await fetchChavesLeadsCaptados(dbUser!.empresa_id);
       const telCaptados = new Set(
         chaves
           .filter((c) => c.telefone)

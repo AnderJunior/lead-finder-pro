@@ -145,15 +145,17 @@ const Leads = () => {
   const [dataFim, setDataFim] = useState<Date | undefined>();
   const [importOpen, setImportOpen] = useState(false);
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, dbUser } = useAuth();
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (!dbUser) return;
+      const eid = dbUser.empresa_id;
       const [data, usrs] = await Promise.all([
-        fetchLeadsCaptados(),
-        isAdmin ? fetchUsuariosEmpresa() : Promise.resolve([]),
+        fetchLeadsCaptados(eid),
+        isAdmin ? fetchUsuariosEmpresa(eid) : Promise.resolve([]),
       ]);
       setLeads(data);
       setUsuarios(usrs);
@@ -270,7 +272,7 @@ const Leads = () => {
   const handleDelete = async () => {
     if (selectedIds.size === 0) return;
     try {
-      await deleteLeadsCaptados(Array.from(selectedIds));
+      await deleteLeadsCaptados(Array.from(selectedIds), dbUser!.empresa_id);
       toast({
         title: "Leads removidos",
         description: `${selectedIds.size} leads foram removidos.`,
@@ -512,34 +514,35 @@ const Leads = () => {
               <table className="w-full table-fixed">
                 <colgroup>
                   <col className="w-10" />
-                  {isAdmin && <col className="w-[12%]" />}
-                  <col className="w-[30%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[12%]" />
+                  <col className="w-[32%]" />  {/* Empresa */}
+                  <col className="w-[14%]" />  {/* Telefone */}
+                  <col className="w-[10%]" />  {/* Avaliação */}
+                  <col className="w-[9%]" />   {/* WhatsApp */}
+                  <col className="w-[18%]" />  {/* Busca */}
+                  <col className="w-[14%]" />  {/* Captado em */}
                 </colgroup>
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      <Checkbox
-                        checked={paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id))}
-                        onCheckedChange={(checked) => {
-                          if (checked) selectAll();
-                          else clearSelection();
-                        }}
-                      />
+                    <th
+                      className="w-10 px-3 py-3 cursor-pointer"
+                      onClick={() => {
+                        if (paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id))) clearSelection();
+                        else selectAll();
+                      }}
+                    >
+                      <div className="flex items-center justify-center">
+                        <Checkbox
+                          checked={paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id))}
+                          tabIndex={-1}
+                        />
+                      </div>
                     </th>
-                    {isAdmin && (
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vendedor</th>
-                    )}
                     <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Empresa</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Telefone</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avaliação</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">WhatsApp</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Busca</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Captado em</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Telefone</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Avaliação</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">WhatsApp</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Busca</th>
+                    <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Captado em</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -555,19 +558,14 @@ const Leads = () => {
                         style={{ animationDelay: `${i * 30}ms` }}
                         onClick={() => navigate(`/lead/${lead.id}`)}
                       >
-                        <td className="px-3 py-4" onClick={(e) => { e.stopPropagation(); toggleSelection(lead.id); }}>
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={() => toggleSelection(lead.id)}
-                          />
+                        <td
+                          className="w-10 px-3 py-4 cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); toggleSelection(lead.id); }}
+                        >
+                          <div className="flex items-center justify-center">
+                            <Checkbox checked={isSelected} tabIndex={-1} />
+                          </div>
                         </td>
-                        {isAdmin && (
-                          <td className="px-3 py-4">
-                            <span className="text-xs font-medium text-foreground truncate block">
-                              {usuarios.find((u) => u.id === lead.user_id)?.nome || usuarios.find((u) => u.id === lead.user_id)?.email || "—"}
-                            </span>
-                          </td>
-                        )}
                         <td className="px-3 py-4 overflow-hidden">
                           <p className="font-medium text-sm text-foreground truncate">{lead.nome}</p>
                           <p className="text-xs text-muted-foreground mt-0.5 truncate">{lead.endereco || "—"}</p>
@@ -620,7 +618,7 @@ const Leads = () => {
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="px-3 py-4">
+                        <td className="px-3 py-4 text-right">
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
                             {formatDate(lead.data_captacao)}
                           </span>

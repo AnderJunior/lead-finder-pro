@@ -140,13 +140,38 @@ const Funil = () => {
   const [leads, setLeads] = useState<LeadCaptadoComTarefas[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendedores, setVendedores] = useState<UsuarioEmpresa[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filtroUsuario, setFiltroUsuario] = useState<Set<string>>(new Set());
-  const [filtroOrigem, setFiltroOrigem] = useState<Set<string>>(new Set());
-  const [filtroSegmento, setFiltroSegmento] = useState<Set<string>>(new Set());
-  const [filtroLocalizacao, setFiltroLocalizacao] = useState<Set<string>>(new Set());
-  const [filtroDataDe, setFiltroDataDe] = useState<Date | undefined>();
-  const [filtroDataAte, setFiltroDataAte] = useState<Date | undefined>();
+  const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem("funil_search") ?? "");
+  const [filtroUsuario, setFiltroUsuario] = useState<Set<string>>(() => {
+    const s = sessionStorage.getItem("funil_filtroUsuario"); return s ? new Set(JSON.parse(s)) : new Set();
+  });
+  const [filtroOrigem, setFiltroOrigem] = useState<Set<string>>(() => {
+    const s = sessionStorage.getItem("funil_filtroOrigem"); return s ? new Set(JSON.parse(s)) : new Set();
+  });
+  const [filtroSegmento, setFiltroSegmento] = useState<Set<string>>(() => {
+    const s = sessionStorage.getItem("funil_filtroSegmento"); return s ? new Set(JSON.parse(s)) : new Set();
+  });
+  const [filtroLocalizacao, setFiltroLocalizacao] = useState<Set<string>>(() => {
+    const s = sessionStorage.getItem("funil_filtroLocalizacao"); return s ? new Set(JSON.parse(s)) : new Set();
+  });
+  const [filtroDataDe, setFiltroDataDe] = useState<Date | undefined>(() => {
+    const s = sessionStorage.getItem("funil_filtroDataDe"); return s ? new Date(s) : undefined;
+  });
+  const [filtroDataAte, setFiltroDataAte] = useState<Date | undefined>(() => {
+    const s = sessionStorage.getItem("funil_filtroDataAte"); return s ? new Date(s) : undefined;
+  });
+
+  // Persiste filtros no sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("funil_search", searchQuery);
+    sessionStorage.setItem("funil_filtroUsuario", JSON.stringify([...filtroUsuario]));
+    sessionStorage.setItem("funil_filtroOrigem", JSON.stringify([...filtroOrigem]));
+    sessionStorage.setItem("funil_filtroSegmento", JSON.stringify([...filtroSegmento]));
+    sessionStorage.setItem("funil_filtroLocalizacao", JSON.stringify([...filtroLocalizacao]));
+    if (filtroDataDe) sessionStorage.setItem("funil_filtroDataDe", filtroDataDe.toISOString());
+    else sessionStorage.removeItem("funil_filtroDataDe");
+    if (filtroDataAte) sessionStorage.setItem("funil_filtroDataAte", filtroDataAte.toISOString());
+    else sessionStorage.removeItem("funil_filtroDataAte");
+  }, [searchQuery, filtroUsuario, filtroOrigem, filtroSegmento, filtroLocalizacao, filtroDataDe, filtroDataAte]);
 
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverEtapa, setDragOverEtapa] = useState<number | null>(null);
@@ -197,9 +222,10 @@ const Funil = () => {
     if (!dbUser) return;
     setLoading(true);
     try {
+      const eid = dbUser.empresa_id;
       const [etapasData, leadsData] = await Promise.all([
-        fetchFunilEtapas(),
-        fetchLeadsFunil(),
+        fetchFunilEtapas(eid),
+        fetchLeadsFunil(eid),
       ]);
       setEtapas(etapasData);
       setLeads(leadsData);
@@ -220,7 +246,7 @@ const Funil = () => {
 
   useEffect(() => {
     if (isAdmin) {
-      fetchUsuariosEmpresa().then(users => setVendedores(users.filter(u => u.role !== "admin"))).catch(() => {});
+      if (dbUser) fetchUsuariosEmpresa(dbUser.empresa_id).then(users => setVendedores(users.filter(u => u.role !== "admin"))).catch(() => {});
     }
   }, [isAdmin]);
 
@@ -624,7 +650,7 @@ const Funil = () => {
     setAutoEtapaSelecionada(null);
     setLoadingAuto(true);
     try {
-      const data = await fetchFunilAutomacoes();
+      const data = await fetchFunilAutomacoes(dbUser!.empresa_id);
       setAutomacoes(data);
     } catch {
       toast({ title: "Erro ao carregar automações", variant: "destructive" });
@@ -1725,7 +1751,7 @@ const Funil = () => {
                 setEtapaExcluirConfirm(null);
                 setLoadingConfig(true);
                 try {
-                  await deletarFunilEtapa(etapa.id);
+                  await deletarFunilEtapa(etapa.id, dbUser!.empresa_id);
                   setEtapas((prev) => prev.filter((x) => x.id !== etapa.id));
                   setConfigDialogOpen(false);
                   toast({ title: "Etapa excluída" });

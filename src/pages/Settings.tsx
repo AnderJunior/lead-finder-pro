@@ -867,8 +867,8 @@ function TabVendedores() {
         .select("id, email, nome, role, status, plano, created_at")
         .eq("empresa_id", dbUser.empresa_id)
         .order("created_at", { ascending: false }),
-      fetchMetas().catch(() => [] as Meta[]),
-      fetchMetasVendedor().catch(() => [] as MetaVendedor[]),
+      fetchMetas(dbUser.empresa_id).catch(() => [] as Meta[]),
+      fetchMetasVendedor(dbUser.empresa_id).catch(() => [] as MetaVendedor[]),
     ]);
     if (!usersRes.error) setUsers((usersRes.data as DbUserRow[]) || []);
     setMetas(metasRes as Meta[]);
@@ -1336,7 +1336,8 @@ function TabMetas() {
 
   const loadMetas = useCallback(async () => {
     try {
-      const data = await fetchMetas();
+      if (!dbUser) return;
+      const data = await fetchMetas(dbUser.empresa_id);
       setMetas(data);
     } catch (err: any) {
       toast({ title: "Erro ao carregar metas", description: err?.message, variant: "destructive" });

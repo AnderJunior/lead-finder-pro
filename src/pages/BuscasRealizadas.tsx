@@ -141,12 +141,13 @@ const BuscasRealizadas = () => {
   const [dataInicio, setDataInicio] = useState<Date | undefined>();
   const [dataFim, setDataFim] = useState<Date | undefined>();
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, dbUser } = useAuth();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchBuscasRealizadas();
+      if (!dbUser) return;
+      const data = await fetchBuscasRealizadas(dbUser.empresa_id);
       setBuscas(data);
     } catch (err) {
       toast({

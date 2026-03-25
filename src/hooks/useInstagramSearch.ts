@@ -76,7 +76,7 @@ export function useInstagramSearch(): UseInstagramSearchReturn {
 
         let markedResults: InstagramResultWithCaptado[] = results;
         try {
-          const chaves = await fetchChavesLeadsCaptados();
+          const chaves = await fetchChavesLeadsCaptados(dbUser!.empresa_id);
           const nomeCaptados = new Set(
             chaves.map((c) => c.nome.toLowerCase().trim())
           );
@@ -174,7 +174,7 @@ export function useInstagramSearch(): UseInstagramSearchReturn {
 
   const refreshCaptados = useCallback(async () => {
     try {
-      const chaves = await fetchChavesLeadsCaptados();
+      const chaves = await fetchChavesLeadsCaptados(dbUser!.empresa_id);
       const nomeCaptados = new Set(
         chaves.map((c) => c.nome.toLowerCase().trim())
       );

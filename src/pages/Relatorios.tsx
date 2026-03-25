@@ -99,7 +99,7 @@ function TabFunil() {
     );
   }
 
-  const etapasParaFunil = data.funilEtapas.filter((e) => e.totalLeads > 0 || e.ordem <= 4);
+  const etapasParaFunil = data.funilEtapas;
 
   return (
     <div className="space-y-6">
@@ -167,37 +167,35 @@ function TabFunil() {
 
       {/* Conversão entre etapas + Valor por etapa */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Taxas de conversão */}
+        {/* Taxa de Resposta */}
         <div className="card-gradient rounded-xl border border-border p-6">
-          <h3 className="text-base font-semibold text-foreground mb-1">Taxas de Conversão entre Etapas</h3>
-          <p className="text-xs text-muted-foreground mb-4">Percentual de avanço entre cada etapa</p>
-          {data.conversoes.length > 0 ? (
-            <div className="space-y-3">
-              {data.conversoes.map((c, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-medium text-foreground whitespace-nowrap">{c.de}</span>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-medium text-foreground whitespace-nowrap">{c.para}</span>
-                  </div>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${Math.min(c.taxa, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-bold text-foreground w-12 text-right">{c.taxa}%</span>
-                    <span className="text-[10px] text-muted-foreground w-8 text-right">
-                      {c.convertidos}/{c.total}
-                    </span>
-                  </div>
+          <h3 className="text-base font-semibold text-foreground mb-1">Taxa de Resposta</h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Leads que responderam dentre os que você entrou em contato
+          </p>
+          {data.taxaResposta.totalContatados > 0 ? (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="text-4xl font-bold text-primary">{data.taxaResposta.taxa}%</div>
+              <div className="w-full max-w-xs h-3 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${Math.min(data.taxaResposta.taxa, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                <div className="flex flex-col items-center">
+                  <span className="text-lg font-semibold text-foreground">{data.taxaResposta.totalContatados}</span>
+                  <span className="text-xs">Contatados</span>
                 </div>
-              ))}
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                <div className="flex flex-col items-center">
+                  <span className="text-lg font-semibold text-foreground">{data.taxaResposta.totalResponderam}</span>
+                  <span className="text-xs">Responderam</span>
+                </div>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">Sem dados</p>
+            <p className="text-sm text-muted-foreground text-center py-8">Sem dados de contato</p>
           )}
         </div>
 

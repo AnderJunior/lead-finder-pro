@@ -207,9 +207,11 @@ const LeadDetails = () => {
     if (!id) return;
     if (!silent) setLoading(true);
     try {
+      if (!dbUser) return;
+      const eid = dbUser.empresa_id;
       const [leadData, etapasData, logsData, anotacoesData] = await Promise.all([
-        fetchLeadById(Number(id)),
-        fetchFunilEtapas(),
+        fetchLeadById(Number(id), eid),
+        fetchFunilEtapas(eid),
         fetchFunilLogsByLead(Number(id)),
         fetchLeadAnotacoes(Number(id)),
       ]);

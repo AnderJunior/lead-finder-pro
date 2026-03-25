@@ -103,7 +103,7 @@ export async function captarLeads(leads: LeadCaptadoPayload[]) {
 
   const userId = leads[0].user_id;
   const empresaId = leads[0].empresa_id;
-  const etapas = await fetchFunilEtapas();
+  const etapas = await fetchFunilEtapas(empresaId);
   const etapaNovoLead = etapas.find((e) => e.ordem === 0);
 
   const rows = leads.map((l, i) => ({
@@ -146,6 +146,11 @@ export async function captarLeads(leads: LeadCaptadoPayload[]) {
       empresa_id: empresaId,
     }));
     await supabase.from("funil_logs_movimentacao").insert(logs);
+
+    // Executa automações da etapa "Novo Lead" para cada lead captado
+    await Promise.all(
+      data.map((lead) => executarAutomacoesParaEtapa(lead.id, etapaNovoLead.id, empresaId))
+    );
   }
 
   return { count: data?.length ?? rows.length };
@@ -188,23 +193,25 @@ export interface LeadCaptado {
   instagram_url: string | null;
 }
 
-export async function fetchLeadsCaptados(): Promise<LeadCaptado[]> {
+export async function fetchLeadsCaptados(empresaId: number): Promise<LeadCaptado[]> {
   const { data, error } = await supabase
     .from("leads_captados")
     .select("*")
+    .eq("empresa_id", empresaId)
     .order("data_captacao", { ascending: false });
 
   if (error) throw new Error(error.message);
   return (data as LeadCaptado[]) ?? [];
 }
 
-export async function deleteLeadsCaptados(ids: number[]) {
+export async function deleteLeadsCaptados(ids: number[], empresaId: number) {
   if (ids.length === 0) return;
 
   const { error } = await supabase
     .from("leads_captados")
     .delete()
-    .in("id", ids);
+    .in("id", ids)
+    .eq("empresa_id", empresaId);
 
   if (error) throw new Error(error.message);
 }
@@ -215,10 +222,11 @@ export interface LeadCaptadoChave {
   website: string | null;
 }
 
-export async function fetchChavesLeadsCaptados(): Promise<LeadCaptadoChave[]> {
+export async function fetchChavesLeadsCaptados(empresaId: number): Promise<LeadCaptadoChave[]> {
   const { data, error } = await supabase
     .from("leads_captados")
-    .select("telefone, nome, website");
+    .select("telefone, nome, website")
+    .eq("empresa_id", empresaId);
 
   if (error) throw new Error(error.message);
   return (data as LeadCaptadoChave[]) ?? [];
@@ -252,10 +260,11 @@ export interface LeadCaptadoComTarefas extends LeadCaptado {
   captor_nome?: string | null;
 }
 
-export async function fetchFunilEtapas(): Promise<FunilEtapa[]> {
+export async function fetchFunilEtapas(empresaId: number): Promise<FunilEtapa[]> {
   const { data, error } = await supabase
     .from("funil_etapas")
     .select("*")
+    .eq("empresa_id", empresaId)
     .order("ordem", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -320,8 +329,8 @@ export async function criarFunilEtapa(payload: {
   return data as FunilEtapa;
 }
 
-export async function deletarFunilEtapa(id: number): Promise<void> {
-  const todas = await fetchFunilEtapas();
+export async function deletarFunilEtapa(id: number, empresaId: number): Promise<void> {
+  const todas = await fetchFunilEtapas(empresaId);
   const etapaOrdem0 = todas.find((e) => e.ordem === 0);
   const etapa = todas.find((e) => e.id === id);
   if (!etapaOrdem0) throw new Error("Etapa de ordem 0 não encontrada.");
@@ -347,10 +356,11 @@ export async function reordenarFunilEtapas(
   }
 }
 
-export async function fetchLeadsFunil(): Promise<LeadCaptadoComTarefas[]> {
+export async function fetchLeadsFunil(empresaId: number): Promise<LeadCaptadoComTarefas[]> {
   const { data, error } = await supabase
     .from("leads_captados")
     .select("*, funil_tarefas(*)")
+    .eq("empresa_id", empresaId)
     .not("etapa_id", "is", null)
     .order("ordem_funil", { ascending: true });
 
@@ -358,12 +368,13 @@ export async function fetchLeadsFunil(): Promise<LeadCaptadoComTarefas[]> {
   return (data as LeadCaptadoComTarefas[]) ?? [];
 }
 
-export async function fetchLeadsSemEtapa(): Promise<
+export async function fetchLeadsSemEtapa(empresaId: number): Promise<
   Pick<LeadCaptado, "id" | "nome" | "telefone" | "segmento_busca">[]
 > {
   const { data, error } = await supabase
     .from("leads_captados")
     .select("id, nome, telefone, segmento_busca")
+    .eq("empresa_id", empresaId)
     .is("etapa_id", null)
     .order("data_captacao", { ascending: false });
 
@@ -511,10 +522,11 @@ export interface FunilAutomacao {
   created_at: string;
 }
 
-export async function fetchFunilAutomacoes(): Promise<FunilAutomacao[]> {
+export async function fetchFunilAutomacoes(empresaId: number): Promise<FunilAutomacao[]> {
   const { data, error } = await supabase
     .from("funil_automacoes")
     .select("*")
+    .eq("empresa_id", empresaId)
     .order("etapa_id")
     .order("ordem");
 
@@ -561,7 +573,7 @@ export async function executarAutomacoesParaEtapa(
   etapaId: number,
   empresaId: number
 ): Promise<FunilTarefa[]> {
-  const automacoes = await fetchFunilAutomacoes();
+  const automacoes = await fetchFunilAutomacoes(empresaId);
   const daEtapa = automacoes.filter((a) => a.etapa_id === etapaId);
 
   if (daEtapa.length === 0) return [];
@@ -587,11 +599,12 @@ export async function executarAutomacoesParaEtapa(
 
 // ─── Lead individual ─────────────────────────────────────────────────
 
-export async function fetchLeadById(id: number): Promise<LeadCaptadoComTarefas> {
+export async function fetchLeadById(id: number, empresaId: number): Promise<LeadCaptadoComTarefas> {
   const { data, error } = await supabase
     .from("leads_captados")
     .select("*, captor:user_id(nome), funil_tarefas(*, concluidor:concluida_por_user_id(nome))")
     .eq("id", id)
+    .eq("empresa_id", empresaId)
     .single();
 
   if (error) throw new Error(error.message);
@@ -694,10 +707,11 @@ export interface FunilLogMovimentacao {
   user_nome?: string | null;
 }
 
-export async function fetchFunilLogs(): Promise<FunilLogMovimentacao[]> {
+export async function fetchFunilLogs(empresaId: number): Promise<FunilLogMovimentacao[]> {
   const { data, error } = await supabase
     .from("funil_logs_movimentacao")
     .select("*")
+    .eq("empresa_id", empresaId)
     .order("data_entrada", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -728,10 +742,11 @@ export interface UsuarioEmpresa {
   avatar_url: string | null;
 }
 
-export async function fetchUsuariosEmpresa(): Promise<UsuarioEmpresa[]> {
+export async function fetchUsuariosEmpresa(empresaId: number): Promise<UsuarioEmpresa[]> {
   const { data, error } = await supabase
     .from("users")
     .select("id, email, nome, role, avatar_url")
+    .eq("empresa_id", empresaId)
     .order("nome", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -761,10 +776,11 @@ export interface MetaVendedor {
   empresa_id: number;
 }
 
-export async function fetchMetas(): Promise<Meta[]> {
+export async function fetchMetas(empresaId: number): Promise<Meta[]> {
   const { data, error } = await supabase
     .from("metas")
     .select("*")
+    .eq("empresa_id", empresaId)
     .order("fixa", { ascending: false })
     .order("created_at", { ascending: true });
 
@@ -772,10 +788,11 @@ export async function fetchMetas(): Promise<Meta[]> {
   return (data as Meta[]) ?? [];
 }
 
-export async function fetchMetasVendedor(): Promise<MetaVendedor[]> {
+export async function fetchMetasVendedor(empresaId: number): Promise<MetaVendedor[]> {
   const { data, error } = await supabase
     .from("metas_vendedor")
-    .select("*");
+    .select("*")
+    .eq("empresa_id", empresaId);
 
   if (error) throw new Error(error.message);
   return (data as MetaVendedor[]) ?? [];
@@ -973,10 +990,11 @@ export interface BuscaRealizada {
   user_email?: string | null;
 }
 
-export async function fetchBuscasRealizadas(): Promise<BuscaRealizada[]> {
+export async function fetchBuscasRealizadas(empresaId: number): Promise<BuscaRealizada[]> {
   const { data, error } = await supabase
     .from("buscas_realizadas")
     .select("*, users:user(nome, email)")
+    .eq("empresa_id", empresaId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
