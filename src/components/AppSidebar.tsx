@@ -89,19 +89,11 @@ export function AppSidebar() {
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-sidebar flex flex-col">
       {/* Logo */}
       <div className="flex items-center justify-center px-6 py-5 border-b border-border">
-        {empresaConfig?.logo_url ? (
-          <img
-            src={empresaConfig.logo_url}
-            alt={empresaConfig.nome || "ClientScout"}
-            className="h-9 max-w-[180px] object-contain"
-          />
-        ) : (
-          <img
-            src="/logo-sistema.png"
-            alt="ClientScout"
-            className="h-9 max-w-[200px] object-contain"
-          />
-        )}
+        <img
+          src="/logo-sistema.png"
+          alt="LeadRadar"
+          className="h-9 max-w-[200px] object-contain"
+        />
       </div>
 
       {/* Navigation */}

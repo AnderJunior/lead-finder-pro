@@ -64,9 +64,9 @@ export function SupportDialog({ open, onOpenChange }: SupportDialogProps) {
   };
 
   const handleEnviarChamado = () => {
-    const subject = encodeURIComponent(`[Suporte ClientScout] ${chamadoData.assunto}`);
+    const subject = encodeURIComponent(`[Suporte LeadRadar] ${chamadoData.assunto}`);
     const body = encodeURIComponent(chamadoData.mensagem);
-    window.location.href = `mailto:suporte@clientscout.com.br?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:suporte@leadradar.com.br?subject=${subject}&body=${body}`;
     setShowChamadoForm(false);
     setChamadoData({ assunto: "", mensagem: "" });
     onOpenChange(false);

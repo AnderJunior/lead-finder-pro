@@ -460,9 +460,6 @@ function TabEmpresa() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [empresaId, setEmpresaId] = useState<number | null>(null);
-  const [logoUrl, setLogoUrl] = useState("");
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<EmpresaFormValues>({
     resolver: zodResolver(empresaSchema),
@@ -478,7 +475,6 @@ function TabEmpresa() {
         .maybeSingle();
       if (data) {
         setEmpresaId(data.id);
-        setLogoUrl(data.logo_url || "");
         form.reset({
           nome: data.nome || "",
           cnpj: data.cnpj || "",
@@ -490,51 +486,6 @@ function TabEmpresa() {
       setLoading(false);
     })();
   }, [form]);
-
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !empresaId) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Formato inválido", description: "Selecione uma imagem JPG ou PNG.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: "O tamanho máximo é 5MB.", variant: "destructive" });
-      return;
-    }
-
-    setUploadingLogo(true);
-    try {
-      const ext = file.name.split(".").pop();
-      const filePath = `empresa-${empresaId}/${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("logos")
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrl } = supabase.storage
-        .from("logos")
-        .getPublicUrl(filePath);
-
-      const { error: updateError } = await supabase
-        .from("configuracoes_empresa")
-        .update({ logo_url: publicUrl.publicUrl })
-        .eq("id", empresaId);
-
-      if (updateError) throw updateError;
-
-      setLogoUrl(publicUrl.publicUrl);
-      toast({ title: "Logo atualizada", description: "A logo da empresa foi alterada." });
-    } catch (err: any) {
-      toast({ title: "Erro ao enviar logo", description: err?.message || "Erro desconhecido", variant: "destructive" });
-    } finally {
-      setUploadingLogo(false);
-      if (logoInputRef.current) logoInputRef.current.value = "";
-    }
-  }
 
   async function onSubmit(values: EmpresaFormValues) {
     setSaving(true);
@@ -615,51 +566,6 @@ function TabEmpresa() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Logo da Empresa */}
-        <div className="flex items-center gap-5">
-          <div className="relative">
-            <Avatar className="h-20 w-20 rounded-lg border-2 border-primary/20">
-              <AvatarImage src={logoUrl || undefined} alt="Logo da empresa" className="object-contain" />
-              <AvatarFallback className="rounded-lg bg-primary/10 text-primary text-xl font-bold">
-                <Building2 className="h-8 w-8" />
-              </AvatarFallback>
-            </Avatar>
-            <button
-              type="button"
-              onClick={() => logoInputRef.current?.click()}
-              disabled={uploadingLogo}
-              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow hover:bg-primary/90 transition-colors"
-            >
-              {uploadingLogo ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Camera className="h-3.5 w-3.5" />
-              )}
-            </button>
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/jpeg,image/png"
-              className="hidden"
-              onChange={handleLogoUpload}
-            />
-          </div>
-          <div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => logoInputRef.current?.click()}
-              disabled={uploadingLogo}
-            >
-              <Camera className="h-4 w-4 mr-2" />
-              Alterar logo
-            </Button>
-            <p className="text-xs text-muted-foreground mt-1">JPG, PNG até 5MB</p>
-          </div>
-        </div>
-
-        <Separator />
-
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField

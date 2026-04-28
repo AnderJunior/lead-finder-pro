@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
           cycle: CICLO_MAP[ciclo] || "MONTHLY",
           value: valor,
           nextDueDate: dueDateStr,
-          description: `ClientScout - ${CICLO_LABEL[ciclo] || "Mensal"}`,
+          description: `LeadRadar - ${CICLO_LABEL[ciclo] || "Mensal"}`,
         }),
       });
 

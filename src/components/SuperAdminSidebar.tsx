@@ -44,7 +44,7 @@ export function SuperAdminSidebar() {
       <div className="flex items-center justify-center px-6 py-5 border-b border-gray-200">
         <img
           src="/logo-sistema.png"
-          alt="ClientScout"
+          alt="LeadRadar"
           className="h-11 max-w-[200px] object-contain"
         />
       </div>

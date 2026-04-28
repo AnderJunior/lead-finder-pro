@@ -135,7 +135,7 @@ export default function Login() {
         <div className="flex items-center justify-center mb-8">
           <img
             src="/logo-sistema.png"
-            alt="ClientScout"
+            alt="LeadRadar"
             className="h-12 max-w-[280px] object-contain"
           />
         </div>
