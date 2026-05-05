@@ -8,26 +8,76 @@ import {
   Loader2,
   Check,
   Users,
-  FileText,
-  Search,
+  Coins,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { fetchPlanos, upsertPlano, deletePlano, type Plano } from "@/lib/super-admin-functions";
+import {
+  fetchPlanos,
+  upsertPlano,
+  deletePlano,
+  fetchPacotesCreditos,
+  upsertPacoteCredito,
+  deletePacoteCredito,
+  type Plano,
+  type PacoteCredito,
+} from "@/lib/super-admin-functions";
 import { useToast } from "@/hooks/use-toast";
 
 function currency(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
+export default function SuperAdminPlanos() {
+  return (
+    <SuperAdminLayout>
+      <div className="max-w-7xl mx-auto space-y-6">
+        <Tabs defaultValue="planos" className="w-full">
+          <TabsList className="bg-white border border-gray-200">
+            <TabsTrigger
+              value="planos"
+              className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-white"
+            >
+              <Package className="h-4 w-4" />
+              Planos
+            </TabsTrigger>
+            <TabsTrigger
+              value="pacotes"
+              className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-white"
+            >
+              <Coins className="h-4 w-4" />
+              Pacotes de Créditos
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="planos" className="mt-6">
+            <PlanosTab />
+          </TabsContent>
+
+          <TabsContent value="pacotes" className="mt-6">
+            <PacotesTab />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </SuperAdminLayout>
+  );
+}
+
+// ─── Aba Planos ─────────────────────────────────────────────────────
 
 const emptyPlano: Partial<Plano> = {
   nome: "",
@@ -35,13 +85,14 @@ const emptyPlano: Partial<Plano> = {
   preco_mensal: 0,
   preco_anual: 0,
   max_usuarios: 5,
-  max_leads: 1000,
-  max_buscas_mes: 100,
+  creditos_iniciais: 1000,
+  max_leads: 0,
+  max_buscas_mes: 0,
   recursos: [],
   ativo: true,
 };
 
-export default function SuperAdminPlanos() {
+function PlanosTab() {
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Plano> | null>(null);
@@ -57,7 +108,9 @@ export default function SuperAdminPlanos() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadPlanos(); }, []);
+  useEffect(() => {
+    loadPlanos();
+  }, []);
 
   const handleEdit = (plano: Plano) => {
     setEditing(plano);
@@ -73,9 +126,12 @@ export default function SuperAdminPlanos() {
     if (!editing?.nome) return;
     setSaving(true);
     try {
+      const isGratuito = editing.nome.trim().toLowerCase() === "gratuito";
       await upsertPlano({
         ...editing,
         nome: editing.nome!,
+        preco_mensal: isGratuito ? 0 : editing.preco_mensal ?? 0,
+        preco_anual: isGratuito ? 0 : editing.preco_anual ?? 0,
         recursos: recursosText.split("\n").map((r) => r.trim()).filter(Boolean),
       });
       toast({ title: "Plano salvo com sucesso" });
@@ -100,130 +156,132 @@ export default function SuperAdminPlanos() {
   };
 
   return (
-    <SuperAdminLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Planos</h1>
-            <p className="text-sm text-gray-500 mt-1">Gerencie os planos disponíveis no sistema</p>
-          </div>
-          <Button onClick={handleNew} className="bg-primary hover:bg-primary/90 text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Plano
-          </Button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Planos</h1>
+          <p className="text-sm text-gray-500 mt-1">Gerencie os planos disponíveis no sistema</p>
         </div>
+        <Button onClick={handleNew} className="bg-primary hover:bg-primary/90 text-white">
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Plano
+        </Button>
+      </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : planos.length === 0 ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
-            <Package className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">Nenhum plano cadastrado</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {planos.map((plano) => (
-              <div
-                key={plano.id}
-                className={cn(
-                  "rounded-xl border bg-white p-6 flex flex-col gap-4 relative shadow-sm",
-                  plano.ativo ? "border-gray-200" : "border-gray-200 opacity-60"
-                )}
-              >
-                {!plano.ativo && (
-                  <span className="absolute top-3 right-3 text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">Inativo</span>
-                )}
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">{plano.nome}</h3>
-                  {plano.descricao && <p className="text-sm text-gray-500 mt-1">{plano.descricao}</p>}
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-3xl font-bold text-gray-900">
-                    {currency(plano.preco_mensal)}
-                    <span className="text-sm font-normal text-gray-400">/mês</span>
-                  </p>
-                  <p className="text-sm text-gray-400">
-                    ou {currency(plano.preco_anual)}/ano
-                  </p>
-                </div>
-
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Users className="h-4 w-4 text-gray-400" />
-                    Até {plano.max_usuarios} usuários
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <FileText className="h-4 w-4 text-gray-400" />
-                    Até {plano.max_leads.toLocaleString("pt-BR")} leads
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Search className="h-4 w-4 text-gray-400" />
-                    {plano.max_buscas_mes.toLocaleString("pt-BR")} buscas/mês
-                  </div>
-                  {plano.recursos.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
-                      {plano.recursos.map((recurso, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
-                          <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                          {recurso}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2 pt-2 border-t border-gray-100">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(plano)}
-                    className="flex-1 border-gray-200 text-gray-700 hover:bg-primary hover:text-primary-foreground hover:border-primary"
-                  >
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                    Editar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(plano.id)}
-                    className="border-gray-200 text-red-500 hover:bg-red-50 hover:border-red-200"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Dialog de edição */}
-        <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-          <DialogContent className="bg-white border-gray-200 text-gray-900 max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="text-gray-900">
-                {editing?.id ? "Editar Plano" : "Novo Plano"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : planos.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+          <Package className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Nenhum plano cadastrado</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {planos.map((plano) => (
+            <div
+              key={plano.id}
+              className={cn(
+                "rounded-xl border bg-white p-6 flex flex-col gap-4 relative shadow-sm",
+                plano.ativo ? "border-gray-200" : "border-gray-200 opacity-60"
+              )}
+            >
+              {!plano.ativo && (
+                <span className="absolute top-3 right-3 text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                  Inativo
+                </span>
+              )}
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Nome</label>
-                <Input
-                  value={editing?.nome || ""}
-                  onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))}
-                  className="bg-white border-gray-200 text-gray-900"
-                />
+                <h3 className="text-lg font-bold text-gray-900">{plano.nome}</h3>
+                {plano.descricao && <p className="text-sm text-gray-500 mt-1">{plano.descricao}</p>}
               </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Descrição</label>
-                <Input
-                  value={editing?.descricao || ""}
-                  onChange={(e) => setEditing((p) => ({ ...p, descricao: e.target.value }))}
-                  className="bg-white border-gray-200 text-gray-900"
-                />
+
+              <div className="space-y-1">
+                {plano.preco_mensal === 0 && plano.preco_anual === 0 ? (
+                  <p className="text-3xl font-bold text-emerald-600">Grátis</p>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold text-gray-900">
+                      {currency(plano.preco_mensal)}
+                      <span className="text-sm font-normal text-gray-400">/mês</span>
+                    </p>
+                    <p className="text-sm text-gray-400">ou {currency(plano.preco_anual)}/ano</p>
+                  </>
+                )}
               </div>
+
+              <div className="space-y-2 flex-1">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Users className="h-4 w-4 text-gray-400" />
+                  Até {plano.max_usuarios} usuários
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Coins className="h-4 w-4 text-gray-400" />
+                  {plano.creditos_iniciais.toLocaleString("pt-BR")} créditos iniciais
+                </div>
+                {plano.recursos.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                    {plano.recursos.map((recurso, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                        <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        {recurso}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleEdit(plano)}
+                  className="flex-1 border-gray-200 text-gray-700 hover:bg-primary hover:text-primary-foreground hover:border-primary"
+                >
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDelete(plano.id)}
+                  className="border-gray-200 text-red-500 hover:bg-red-50 hover:border-red-200"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Dialog de edição */}
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="bg-white border-gray-200 text-gray-900 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900">
+              {editing?.id ? "Editar Plano" : "Novo Plano"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Nome</label>
+              <Input
+                value={editing?.nome || ""}
+                onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))}
+                className="bg-white border-gray-200 text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Descrição</label>
+              <Input
+                value={editing?.descricao || ""}
+                onChange={(e) => setEditing((p) => ({ ...p, descricao: e.target.value }))}
+                className="bg-white border-gray-200 text-gray-900"
+              />
+            </div>
+            {(editing?.nome || "").toLowerCase() !== "gratuito" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Preço Mensal (R$)</label>
@@ -244,73 +302,305 @@ export default function SuperAdminPlanos() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Máx. Usuários</label>
-                  <Input
-                    type="number"
-                    value={editing?.max_usuarios || 0}
-                    onChange={(e) => setEditing((p) => ({ ...p, max_usuarios: Number(e.target.value) }))}
-                    className="bg-white border-gray-200 text-gray-900"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Máx. Leads</label>
-                  <Input
-                    type="number"
-                    value={editing?.max_leads || 0}
-                    onChange={(e) => setEditing((p) => ({ ...p, max_leads: Number(e.target.value) }))}
-                    className="bg-white border-gray-200 text-gray-900"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Buscas/mês</label>
-                  <Input
-                    type="number"
-                    value={editing?.max_buscas_mes || 0}
-                    onChange={(e) => setEditing((p) => ({ ...p, max_buscas_mes: Number(e.target.value) }))}
-                    className="bg-white border-gray-200 text-gray-900"
-                  />
-                </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Máx. Usuários</label>
+                <Input
+                  type="number"
+                  value={editing?.max_usuarios || 0}
+                  onChange={(e) => setEditing((p) => ({ ...p, max_usuarios: Number(e.target.value) }))}
+                  className="bg-white border-gray-200 text-gray-900"
+                />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Recursos (um por linha)</label>
-                <Textarea
-                  value={recursosText}
-                  onChange={(e) => setRecursosText(e.target.value)}
-                  rows={4}
+                <label className="text-xs text-gray-500 mb-1 block">Créditos Iniciais</label>
+                <Input
+                  type="number"
+                  value={editing?.creditos_iniciais || 0}
+                  onChange={(e) => setEditing((p) => ({ ...p, creditos_iniciais: Number(e.target.value) }))}
                   className="bg-white border-gray-200 text-gray-900"
-                  placeholder="Dashboard&#10;Funil avançado&#10;Relatórios"
                 />
               </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={editing?.ativo ?? true}
-                  onCheckedChange={(v) => setEditing((p) => ({ ...p, ativo: v }))}
-                />
-                <span className="text-sm text-gray-600">Plano ativo</span>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Recursos (um por linha)</label>
+              <Textarea
+                value={recursosText}
+                onChange={(e) => setRecursosText(e.target.value)}
+                rows={4}
+                className="bg-white border-gray-200 text-gray-900"
+                placeholder="Dashboard&#10;Funil avançado&#10;Relatórios"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={editing?.ativo ?? true}
+                onCheckedChange={(v) => setEditing((p) => ({ ...p, ativo: v }))}
+              />
+              <span className="text-sm text-gray-600">Plano ativo</span>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setEditing(null)}
+                className="border-gray-200 text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={saving || !editing?.nome}
+                className="bg-primary hover:bg-primary/90 text-white"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Aba Pacotes de Créditos ────────────────────────────────────────
+
+const emptyPacote: Partial<PacoteCredito> = {
+  nome: "",
+  quantidade: 100,
+  preco: 0,
+  ativo: true,
+  ordem: 0,
+};
+
+function PacotesTab() {
+  const { toast } = useToast();
+  const [pacotes, setPacotes] = useState<PacoteCredito[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Partial<PacoteCredito> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<PacoteCredito | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    fetchPacotesCreditos()
+      .then(setPacotes)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleSave = async () => {
+    if (!editing?.nome || !editing?.quantidade) return;
+    setSaving(true);
+    try {
+      await upsertPacoteCredito({
+        id: editing.id,
+        nome: editing.nome,
+        quantidade: editing.quantidade,
+        preco: editing.preco ?? 0,
+        ativo: editing.ativo ?? true,
+        ordem: editing.ordem ?? 0,
+      });
+      toast({ title: "Pacote salvo" });
+      setEditing(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await deletePacoteCredito(confirmDelete.id);
+      toast({ title: "Pacote excluído" });
+      setConfirmDelete(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Pacotes de Créditos</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Cadastre opções pré-definidas de créditos para acelerar a venda manual.
+          </p>
+        </div>
+        <Button onClick={() => setEditing({ ...emptyPacote })} className="bg-primary hover:bg-primary/90 text-white">
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Pacote
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : pacotes.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+          <Coins className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Nenhum pacote cadastrado</p>
+          <p className="text-xs text-gray-400 mt-1">Clique em "Novo Pacote" para criar o primeiro</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pacotes.map((p) => (
+            <div
+              key={p.id}
+              className={cn(
+                "rounded-xl border bg-white p-5 shadow-sm flex flex-col gap-3",
+                !p.ativo && "opacity-60 border-dashed"
+              )}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">{p.nome}</h3>
+                  {!p.ativo && (
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">Inativo</span>
+                  )}
+                </div>
+                {p.ativo ? <Power className="h-4 w-4 text-emerald-500" /> : <PowerOff className="h-4 w-4 text-gray-400" />}
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              <div className="flex items-baseline gap-2">
+                <Coins className="h-5 w-5 text-primary" />
+                <span className="text-3xl font-bold text-gray-900">{p.quantidade.toLocaleString("pt-BR")}</span>
+                <span className="text-sm text-gray-400">créditos</span>
+              </div>
+
+              {p.preco > 0 ? (
+                <p className="text-sm text-gray-700">
+                  Preço sugerido: <span className="font-semibold">{currency(p.preco)}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Sem preço sugerido</p>
+              )}
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
                 <Button
                   variant="outline"
-                  onClick={() => setEditing(null)}
-                  className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                  size="sm"
+                  onClick={() => setEditing(p)}
+                  className="flex-1 border-gray-200 text-gray-700 hover:bg-primary hover:text-primary-foreground hover:border-primary"
                 >
-                  Cancelar
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                  Editar
                 </Button>
                 <Button
-                  onClick={handleSave}
-                  disabled={saving || !editing?.nome}
-                  className="bg-primary hover:bg-primary/90 text-white"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmDelete(p)}
+                  className="border-gray-200 text-red-500 hover:bg-red-50 hover:border-red-200"
                 >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Salvar
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-    </SuperAdminLayout>
+          ))}
+        </div>
+      )}
+
+      {/* Editor de pacote */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editing?.id ? "Editar Pacote" : "Novo Pacote"}</DialogTitle>
+            <DialogDescription>
+              Pacotes pré-definidos aparecem ao adicionar créditos a uma empresa.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Nome do pacote</label>
+              <Input
+                value={editing?.nome || ""}
+                onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))}
+                placeholder="Ex.: Pacote Básico"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Quantidade de créditos</label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={editing?.quantidade ?? 0}
+                  onChange={(e) => setEditing((p) => ({ ...p, quantidade: Number(e.target.value) }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Preço sugerido (R$)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editing?.preco ?? 0}
+                  onChange={(e) => setEditing((p) => ({ ...p, preco: Number(e.target.value) }))}
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Ordem de exibição</label>
+              <Input
+                type="number"
+                value={editing?.ordem ?? 0}
+                onChange={(e) => setEditing((p) => ({ ...p, ordem: Number(e.target.value) }))}
+                placeholder="Menor aparece primeiro"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={editing?.ativo ?? true}
+                onCheckedChange={(v) => setEditing((p) => ({ ...p, ativo: v }))}
+              />
+              <span className="text-sm text-gray-600">Pacote ativo</span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving || !editing?.nome || !editing?.quantidade}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação de exclusão */}
+      <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir pacote</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o pacote <strong>{confirmDelete?.nome}</strong>? Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

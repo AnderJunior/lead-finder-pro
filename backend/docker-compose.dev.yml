@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: leadradar_postgres_dev
+    environment:
+      POSTGRES_USER: leadradar
+      POSTGRES_PASSWORD: leadradar_dev_pwd
+      POSTGRES_DB: leadradar
+    ports:
+      - "5433:5432"
+    volumes:
+      - leadradar_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leadradar -d leadradar"]
+      interval: 5s
+      retries: 5
+
+volumes:
+  leadradar_pgdata:

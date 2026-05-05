@@ -20,7 +20,9 @@ import {
   Hash,
   Calendar,
   Trash2,
+  Coins,
 } from "lucide-react";
+import { AdicionarCreditosDialog } from "@/components/admin/AdicionarCreditosDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,11 +56,13 @@ import { useToast } from "@/hooks/use-toast";
 function ActionMenu({
   empresa,
   onDetails,
+  onAddCredits,
   onToggle,
   onDelete,
 }: {
   empresa: EmpresaResumo;
   onDetails: () => void;
+  onAddCredits: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }) {
@@ -113,6 +117,13 @@ function ActionMenu({
           >
             <Eye className="h-4 w-4 text-gray-400" />
             Visualizar Detalhes
+          </button>
+          <button
+            onClick={() => { setOpen(false); onAddCredits(); }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-primary hover:bg-primary/5 transition-colors"
+          >
+            <Coins className="h-4 w-4" />
+            Adicionar Créditos
           </button>
           <div className="border-t border-gray-100 my-1" />
           <button
@@ -199,6 +210,9 @@ export default function SuperAdminEmpresas() {
   const [deleteTarget, setDeleteTarget] = useState<EmpresaResumo | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Adicionar Créditos
+  const [creditsTarget, setCreditsTarget] = useState<EmpresaResumo | null>(null);
+
   const loadEmpresas = () => {
     setLoading(true);
     fetchTodasEmpresas()
@@ -212,8 +226,22 @@ export default function SuperAdminEmpresas() {
   const handleOpenNew = () => {
     setForm(EMPTY_FORM);
     setShowNew(true);
+    const applyDefault = (lista: Plano[]) => {
+      const gratuito = lista.find((p) => p.nome.toLowerCase() === "gratuito");
+      const padrao = gratuito ?? lista.find((p) => p.ativo) ?? null;
+      if (padrao) {
+        setForm((f) => ({ ...f, plano_id: padrao.id }));
+      }
+    };
     if (planos.length === 0) {
-      fetchPlanos().then(setPlanos).catch(console.error);
+      fetchPlanos()
+        .then((lista) => {
+          setPlanos(lista);
+          applyDefault(lista);
+        })
+        .catch(console.error);
+    } else {
+      applyDefault(planos);
     }
   };
 
@@ -232,12 +260,17 @@ export default function SuperAdminEmpresas() {
     if (!canCreate) return;
     setCreating(true);
     try {
+      // Senha temporária aleatória — admin recebe pelo console / pode pedir reset depois
+      const tempPassword = Math.random().toString(36).slice(2, 10) + "@LR";
       const payload: NovaEmpresaPayload = {
         nome: form.nome.trim(),
-        cnpj: form.cnpj.trim() || undefined,
-        telefone: form.telefone.trim() || undefined,
+        cnpj: form.cnpj.trim() || null,
+        telefone: form.telefone.trim() || null,
         email_comercial: form.email_comercial.trim(),
-        endereco: form.endereco.trim() || undefined,
+        endereco: form.endereco.trim() || null,
+        admin_nome: form.nome.trim(),
+        admin_email: form.email_comercial.trim(),
+        admin_password: tempPassword,
         plano_id: form.plano_id!,
         ciclo: form.ciclo,
         data_vencimento: form.data_vencimento || undefined,
@@ -247,7 +280,7 @@ export default function SuperAdminEmpresas() {
 
       toast({
         title: "Empresa criada com sucesso",
-        description: `Um e-mail de redefinição de senha foi enviado para ${payload.email_comercial}`,
+        description: `Admin: ${payload.admin_email} | Senha temporária: ${tempPassword}`,
       });
       setShowNew(false);
       loadEmpresas();
@@ -347,7 +380,7 @@ export default function SuperAdminEmpresas() {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">CNPJ</th>
                     <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Usuários</th>
                     <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Plano</th>
-                    <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Pagamento</th>
+                    <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Créditos</th>
                     <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Vencimento</th>
                     <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Ações</th>
                   </tr>
@@ -403,17 +436,18 @@ export default function SuperAdminEmpresas() {
                         )}
                       </td>
                       <td className="px-5 py-4 text-center">
-                        {atrasado ? (
-                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border bg-red-50 text-red-700 border-red-200">
-                            Atrasado
-                          </span>
-                        ) : empresa.assinatura_status ? (
-                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
-                            Em dia
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
+                        <span
+                          className={cn(
+                            "inline-flex items-center text-sm font-medium tabular-nums",
+                            empresa.creditos === 0
+                              ? "text-red-600"
+                              : empresa.creditos < 50
+                                ? "text-yellow-600"
+                                : "text-emerald-600"
+                          )}
+                        >
+                          {empresa.creditos.toLocaleString("pt-BR")}
+                        </span>
                       </td>
                       <td className="px-5 py-4 text-center text-sm text-gray-500">
                         {formatDate(empresa.assinatura_vencimento)}
@@ -422,6 +456,7 @@ export default function SuperAdminEmpresas() {
                         <ActionMenu
                           empresa={empresa}
                           onDetails={() => navigate(`/admin/empresas/${empresa.id}`)}
+                          onAddCredits={() => setCreditsTarget(empresa)}
                           onToggle={() => setConfirmTarget(empresa)}
                           onDelete={() => setDeleteTarget(empresa)}
                         />
@@ -787,6 +822,13 @@ export default function SuperAdminEmpresas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AdicionarCreditosDialog
+        empresa={creditsTarget}
+        open={!!creditsTarget}
+        onOpenChange={(o) => !o && setCreditsTarget(null)}
+        onSuccess={loadEmpresas}
+      />
     </SuperAdminLayout>
   );
 }

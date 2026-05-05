@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { SuperAdminRoute } from "@/components/SuperAdminRoute";
+import { OnboardingVideoModal } from "@/components/OnboardingVideoModal";
 import Index from "./pages/Index";
 import Leads from "./pages/Leads";
 import SearchPage from "./pages/SearchPage";
@@ -22,9 +23,9 @@ import NotFound from "./pages/NotFound";
 import SuperAdminDashboard from "./pages/admin/SuperAdminDashboard";
 import SuperAdminEmpresas from "./pages/admin/SuperAdminEmpresas";
 import SuperAdminPlanos from "./pages/admin/SuperAdminPlanos";
-import SuperAdminAssinaturas from "./pages/admin/SuperAdminAssinaturas";
 import SuperAdminFinanceiro from "./pages/admin/SuperAdminFinanceiro";
 import SuperAdminEmpresaDetalhes from "./pages/admin/SuperAdminEmpresaDetalhes";
+import SuperAdminIntegracoes from "./pages/admin/SuperAdminIntegracoes";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <OnboardingVideoModal />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -44,8 +46,8 @@ const App = () => (
             <Route path="/admin/empresas" element={<SuperAdminRoute><SuperAdminEmpresas /></SuperAdminRoute>} />
             <Route path="/admin/empresas/:id" element={<SuperAdminRoute><SuperAdminEmpresaDetalhes /></SuperAdminRoute>} />
             <Route path="/admin/planos" element={<SuperAdminRoute><SuperAdminPlanos /></SuperAdminRoute>} />
-            <Route path="/admin/assinaturas" element={<SuperAdminRoute><SuperAdminAssinaturas /></SuperAdminRoute>} />
             <Route path="/admin/financeiro" element={<SuperAdminRoute><SuperAdminFinanceiro /></SuperAdminRoute>} />
+            <Route path="/admin/integracoes" element={<SuperAdminRoute><SuperAdminIntegracoes /></SuperAdminRoute>} />
 
             {/* App normal */}
             <Route

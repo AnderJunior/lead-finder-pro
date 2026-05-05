@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useNavigate, Navigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,9 @@ type ResetFormValues = z.infer<typeof resetSchema>;
 export default function ResetPassword() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { session, loading, isPasswordRecovery, clearPasswordRecovery, signOut } = useAuth();
+  const { loading, clearPasswordRecovery, signOut } = useAuth();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -58,30 +60,27 @@ export default function ResetPassword() {
     );
   }
 
-  if (!session && !isPasswordRecovery) {
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
 
   async function onSubmit(values: ResetFormValues) {
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: values.password,
+      await api.post("/api/password-reset/confirm", {
+        token,
+        newPassword: values.password,
       });
-
-      if (error) {
-        toast({
-          title: "Erro ao redefinir senha",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
-
       clearPasswordRecovery();
       toast({ title: "Senha redefinida com sucesso!" });
       await signOut();
       navigate("/login", { replace: true });
+    } catch (err: any) {
+      toast({
+        title: "Erro ao redefinir senha",
+        description: err?.message || "Token inválido ou expirado",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }

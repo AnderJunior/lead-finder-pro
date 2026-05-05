@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
-import { Search, LayoutDashboard, Users, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3, Headphones } from "lucide-react";
+import { useState } from "react";
+import { Search, LayoutDashboard, Users, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3, Coins } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Progress } from "@/components/ui/progress";
 import { useSerperCredits } from "@/hooks/useSerperCredits";
-import { supabase } from "@/lib/supabase";
-import { SupportDialog } from "@/components/SupportDialog";
+
+const WHATSAPP_NUMBER = "5527997226957";
 
 const topNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -33,44 +33,20 @@ export function AppSidebar() {
 
   const navegacaoActive = navegacaoSubItems.some((s) => s.path === location.pathname);
   const [navegacaoOpen, setNavegacaoOpen] = useState(navegacaoActive);
-  const [supportOpen, setSupportOpen] = useState(false);
 
-  const STORAGE_KEY = "empresa_config";
-  const [empresaConfig, setEmpresaConfig] = useState<{ logo_url: string | null; nome: string | null } | null>(() => {
-    if (!dbUser?.empresa_id || typeof sessionStorage === "undefined") return null;
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { empresa_id: number; logo_url?: string | null; nome?: string | null };
-      if (parsed.empresa_id !== dbUser.empresa_id) return null;
-      return { logo_url: parsed.logo_url ?? null, nome: parsed.nome ?? null };
-    } catch { return null; }
-  });
+  const handleQueroMaisCreditos = () => {
+    const empresa = dbUser?.empresa_nome || "minha empresa";
+    const email = dbUser?.email || "";
+    const mensagem = encodeURIComponent(
+      `Olá! Quero comprar mais créditos para a plataforma *LeadRadar*.\n\n` +
+        `Empresa: ${empresa}\n` +
+        `Email: ${email}\n\n` +
+        `Aguardo retorno com as opções de pacotes disponíveis.`
+    );
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${mensagem}`, "_blank");
+  };
 
-  useEffect(() => {
-    if (!dbUser?.empresa_id) return;
-    supabase
-      .from("configuracoes_empresa")
-      .select("nome, logo_url")
-      .eq("id", dbUser.empresa_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          const logo = data.logo_url || null;
-          const nome = data.nome || null;
-          setEmpresaConfig({ logo_url: logo, nome });
-          try {
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-              empresa_id: dbUser.empresa_id,
-              logo_url: logo,
-              nome,
-            }));
-          } catch { /* ignore */ }
-        }
-      });
-  }, [dbUser?.empresa_id]);
-
-  const creditsUsed = totalCredits - credits;
+  const creditsUsed = Math.max(0, totalCredits - credits);
 
   const handleLogout = async () => {
     await signOut();
@@ -156,42 +132,45 @@ export function AppSidebar() {
           </div>
         ) : (
           <>
-            <div className="flex items-baseline justify-between mb-1.5">
-              <span className={cn(
-                "text-lg font-bold",
-                credits <= 250 ? "text-red-500" : credits <= 750 ? "text-yellow-500" : "text-emerald-500"
-              )}>
-                {credits.toLocaleString("pt-BR")}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                / {totalCredits.toLocaleString("pt-BR")}
-              </span>
-            </div>
-            <Progress
-              value={((totalCredits - creditsUsed) / totalCredits) * 100}
-              className={cn(
-                "h-2",
-                credits <= 250 ? "[&>div]:bg-red-500" : credits <= 750 ? "[&>div]:bg-yellow-500" : "[&>div]:bg-emerald-500"
-              )}
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {creditsUsed.toLocaleString("pt-BR")} utilizados
-            </p>
+            {(() => {
+              const total = Math.max(totalCredits, credits);
+              const pct = total > 0 ? credits / total : 0;
+              const colorText = pct <= 0.1 ? "text-red-500" : pct <= 0.3 ? "text-yellow-500" : "text-emerald-500";
+              const colorBar = pct <= 0.1 ? "[&>div]:bg-red-500" : pct <= 0.3 ? "[&>div]:bg-yellow-500" : "[&>div]:bg-emerald-500";
+              return (
+                <>
+                  <div className="flex items-baseline justify-between mb-1.5">
+                    <span className={cn("text-lg font-bold", colorText)}>
+                      {credits.toLocaleString("pt-BR")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      / {total.toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                  <Progress
+                    value={pct * 100}
+                    className={cn("h-2", colorBar)}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {creditsUsed.toLocaleString("pt-BR")} utilizados
+                  </p>
+                </>
+              );
+            })()}
           </>
         )}
       </div>
 
-      {/* Suporte */}
+      {/* Quero Mais Créditos */}
       <div className="px-4 py-3 border-t border-border">
         <button
-          onClick={() => setSupportOpen(true)}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200"
+          onClick={handleQueroMaisCreditos}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/15 transition-all duration-200"
         >
-          <Headphones className="h-4 w-4" />
-          Suporte
+          <Coins className="h-4 w-4" />
+          Quero Mais Créditos
         </button>
       </div>
-      <SupportDialog open={supportOpen} onOpenChange={setSupportOpen} />
 
       {/* Footer com usuário e logout */}
       <div className="px-4 py-3 border-t border-border">

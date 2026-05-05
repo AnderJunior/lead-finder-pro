@@ -1,0 +1,468 @@
+// LeadRadar — Prisma Schema
+// Convertido das migrations Supabase + Lucia/JWT auth próprio
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────────────────────
+
+enum Role {
+  user
+  admin
+  super_admin
+}
+
+enum UserStatus {
+  ativo
+  inativo
+}
+
+enum AssinaturaStatus {
+  ativa
+  vencida
+  cancelada
+  trial
+  suspensa
+}
+
+enum AssinaturaCiclo {
+  mensal
+  trimestral
+  semestral
+  anual
+}
+
+enum PagamentoStatus {
+  pendente
+  pago
+  atrasado
+  cancelado
+}
+
+enum MetaPeriodo {
+  diario
+  semanal
+  mensal
+}
+
+// ─── EMPRESAS ───────────────────────────────────────────────────────────────
+
+model Empresa {
+  id               BigInt    @id @default(autoincrement())
+  nome             String?   @db.VarChar(255)
+  cnpj             String?   @db.VarChar(20)
+  endereco         String?
+  telefone         String?   @db.VarChar(30)
+  email_comercial  String?   @db.VarChar(255)
+  asaas_customer_id String?
+  ativo            Boolean   @default(true)
+  creditos         Int       @default(0)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+  updated_by_id    BigInt?
+
+  // Relations
+  users               User[]
+  leads               Lead[]
+  buscas              BuscaRealizada[]
+  funilEtapas         FunilEtapa[]
+  funilTarefas        FunilTarefa[]
+  funilLogs           FunilLog[]
+  funilAutomacoes     FunilAutomacao[]
+  leadAnotacoes       LeadAnotacao[]
+  metas               Meta[]
+  metasVendedor       MetaVendedor[]
+  assinaturas         Assinatura[]
+  pagamentos          Pagamento[]
+  configIntegracoes   ConfiguracaoIntegracao?
+
+  @@map("empresas")
+}
+
+// ─── USERS ──────────────────────────────────────────────────────────────────
+
+model User {
+  id                          BigInt     @id @default(autoincrement())
+  email                       String     @unique @db.VarChar(255)
+  password_hash               String
+  nome                        String?
+  telefone                    String?
+  avatar_url                  String?
+  role                        Role       @default(user)
+  status                      UserStatus @default(ativo)
+  empresa_id                  BigInt?
+  onboarding_video_watched    Boolean    @default(false)
+  onboarding_video_watched_at DateTime?
+  created_at                  DateTime   @default(now())
+  updated_at                  DateTime   @default(now()) @updatedAt
+
+  empresa            Empresa?         @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  sessions           Session[]
+  passwordResets     PasswordReset[]
+  leads              Lead[]
+  buscas             BuscaRealizada[]
+  funilEtapas        FunilEtapa[]
+  funilTarefasFeitas FunilTarefa[]    @relation("TarefaConcluidaPor")
+  funilLogs          FunilLog[]
+  leadAnotacoes      LeadAnotacao[]
+  metasVendedor      MetaVendedor[]
+
+  @@index([empresa_id])
+  @@map("users")
+}
+
+model Session {
+  id         String   @id // token opaco
+  user_id    BigInt
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("sessions")
+}
+
+model PasswordReset {
+  id         String   @id @default(cuid())
+  user_id    BigInt
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("password_resets")
+}
+
+// ─── CONFIGURAÇÕES ──────────────────────────────────────────────────────────
+
+model ConfiguracaoIntegracao {
+  id                     BigInt   @id @default(autoincrement())
+  empresa_id             BigInt   @unique
+  google_maps_api_key    String   @default("")
+  serper_api_key         String   @default("")
+  evolution_api_url      String   @default("")
+  evolution_api_instance String   @default("")
+  evolution_api_key      String   @default("")
+  updated_at             DateTime @default(now()) @updatedAt
+  updated_by_id          BigInt?
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@map("configuracoes_integracoes")
+}
+
+model ConfiguracaoGlobal {
+  id                     Int      @id @default(1)
+  google_maps_api_key    String   @default("")
+  serper_api_key         String   @default("")
+  evolution_api_url      String   @default("")
+  evolution_api_instance String   @default("")
+  evolution_api_key      String   @default("")
+  onboarding_video_url   String   @default("")
+  updated_at             DateTime @default(now()) @updatedAt
+  updated_by_id          BigInt?
+
+  @@map("configuracoes_globais")
+}
+
+// ─── LEADS / BUSCAS ─────────────────────────────────────────────────────────
+
+model Lead {
+  id                       BigInt    @id @default(autoincrement())
+  nome                     String
+  endereco                 String?
+  telefone                 String?
+  email                    String?
+  website                  String?
+  rating                   Decimal?
+  avaliacoes               Int       @default(0)
+  has_whatsapp             Boolean?
+  whatsapp_status          String?
+  tags                     String[]  @default([])
+  data_captacao            DateTime  @default(now())
+  origem_busca             String?
+  segmento_busca           String?
+  localizacao_busca        String?
+  latitude                 Decimal?
+  longitude                Decimal?
+  user_id                  BigInt
+  empresa_id               BigInt
+  etapa_id                 BigInt?
+  valor                    Decimal   @default(0)
+  contato                  String?
+  notas                    String?
+  status_funil             String    @default("em_andamento")
+  ordem_funil              Int       @default(0)
+  decisor_nome             String?
+  decisor_telefone         String?
+  decisor_email            String?
+  decisor_cargo            String?
+  decisor_enriquecido_em   DateTime?
+  tamanho_empresa          String?
+  linkedin_url             String?
+  facebook_url             String?
+  instagram_url            String?
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @default(now()) @updatedAt
+
+  user      User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  empresa   Empresa        @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  etapa     FunilEtapa?    @relation(fields: [etapa_id], references: [id], onDelete: SetNull)
+  tarefas   FunilTarefa[]
+  logs      FunilLog[]
+  anotacoes LeadAnotacao[]
+
+  @@index([user_id])
+  @@index([empresa_id])
+  @@index([etapa_id])
+  @@index([data_captacao])
+  @@map("leads_captados")
+}
+
+model BuscaRealizada {
+  id            BigInt   @id @default(autoincrement())
+  segmento      String?
+  localizacao   String?
+  tipo_pesquisa String?
+  user_id       BigInt
+  empresa_id    BigInt
+  created_at    DateTime @default(now())
+
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@index([empresa_id])
+  @@index([user_id])
+  @@map("buscas_realizadas")
+}
+
+// ─── FUNIL ──────────────────────────────────────────────────────────────────
+
+model FunilEtapa {
+  id         BigInt   @id @default(autoincrement())
+  nome       String
+  ordem      Int      @default(0)
+  cor        String   @default("#3b82f6")
+  user_id    BigInt
+  empresa_id BigInt
+  created_at DateTime @default(now())
+
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  empresa    Empresa          @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  leads      Lead[]
+  logs       FunilLog[]
+  automacoes FunilAutomacao[]
+
+  @@index([user_id])
+  @@index([empresa_id])
+  @@map("funil_etapas")
+}
+
+model FunilTarefa {
+  id                    BigInt    @id @default(autoincrement())
+  lead_id               BigInt
+  descricao             String
+  data_vencimento       DateTime?
+  concluida             Boolean   @default(false)
+  concluida_em          DateTime?
+  concluida_por_user_id BigInt?
+  empresa_id            BigInt
+  created_at            DateTime  @default(now())
+
+  lead         Lead    @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  concluidaPor User?   @relation("TarefaConcluidaPor", fields: [concluida_por_user_id], references: [id], onDelete: SetNull)
+  empresa      Empresa @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@index([lead_id])
+  @@index([empresa_id])
+  @@index([concluida_por_user_id])
+  @@map("funil_tarefas")
+}
+
+model FunilLog {
+  id           BigInt   @id @default(autoincrement())
+  lead_id      BigInt
+  etapa_id     BigInt
+  data_entrada DateTime @default(now())
+  user_id      BigInt
+  empresa_id   BigInt
+
+  lead    Lead       @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  etapa   FunilEtapa @relation(fields: [etapa_id], references: [id], onDelete: Cascade)
+  user    User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  empresa Empresa    @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@index([lead_id])
+  @@index([etapa_id])
+  @@index([data_entrada])
+  @@index([empresa_id])
+  @@map("funil_logs_movimentacao")
+}
+
+model FunilAutomacao {
+  id               BigInt   @id @default(autoincrement())
+  etapa_id         BigInt
+  descricao        String
+  dias_vencimento  Int      @default(0)
+  ordem            Int      @default(0)
+  empresa_id       BigInt
+  created_at       DateTime @default(now())
+
+  etapa   FunilEtapa @relation(fields: [etapa_id], references: [id], onDelete: Cascade)
+  empresa Empresa    @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@index([etapa_id])
+  @@index([empresa_id])
+  @@map("funil_automacoes")
+}
+
+model LeadAnotacao {
+  id         BigInt   @id @default(autoincrement())
+  lead_id    BigInt
+  texto      String
+  user_id    BigInt
+  empresa_id BigInt
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  lead    Lead    @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@index([lead_id])
+  @@map("lead_anotacoes")
+}
+
+// ─── METAS ──────────────────────────────────────────────────────────────────
+
+model Meta {
+  id         BigInt      @id @default(autoincrement())
+  nome       String
+  slug       String
+  valor      Int         @default(0)
+  periodo    MetaPeriodo @default(mensal)
+  fixa       Boolean     @default(false)
+  empresa_id BigInt
+  created_at DateTime    @default(now())
+  updated_at DateTime    @default(now()) @updatedAt
+
+  empresa    Empresa        @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  vendedores MetaVendedor[]
+
+  @@unique([slug, empresa_id])
+  @@index([empresa_id])
+  @@map("metas")
+}
+
+model MetaVendedor {
+  id         BigInt   @id @default(autoincrement())
+  meta_id    BigInt
+  user_id    BigInt
+  valor      Int      @default(0)
+  empresa_id BigInt
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  meta    Meta    @relation(fields: [meta_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@unique([meta_id, user_id])
+  @@index([empresa_id])
+  @@index([user_id])
+  @@map("metas_vendedor")
+}
+
+// ─── PLANOS / ASSINATURAS / PAGAMENTOS ──────────────────────────────────────
+
+model PacoteCredito {
+  id         BigInt   @id @default(autoincrement())
+  nome       String
+  quantidade Int
+  preco      Decimal  @default(0) @db.Decimal(10, 2)
+  ativo      Boolean  @default(true)
+  ordem      Int      @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@map("pacotes_creditos")
+}
+
+model Plano {
+  id                BigInt   @id @default(autoincrement())
+  nome              String
+  descricao         String?
+  preco_mensal      Decimal  @default(0) @db.Decimal(10, 2)
+  preco_anual       Decimal  @default(0) @db.Decimal(10, 2)
+  max_usuarios      Int      @default(5)
+  creditos_iniciais Int      @default(1000)
+  // Campos legados — mantidos por compatibilidade, não usados na UI
+  max_leads         Int      @default(1000)
+  max_buscas_mes    Int      @default(100)
+  recursos          String[] @default([])
+  ativo             Boolean  @default(true)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now()) @updatedAt
+
+  assinaturas Assinatura[]
+
+  @@map("planos")
+}
+
+model Assinatura {
+  id                    BigInt           @id @default(autoincrement())
+  empresa_id            BigInt
+  plano_id              BigInt
+  status                AssinaturaStatus @default(ativa)
+  ciclo                 AssinaturaCiclo  @default(mensal)
+  valor                 Decimal          @default(0) @db.Decimal(10, 2)
+  data_inicio           DateTime         @default(now())
+  data_vencimento       DateTime
+  data_cancelamento     DateTime?
+  asaas_subscription_id String?
+  observacoes           String?
+  created_at            DateTime         @default(now())
+  updated_at            DateTime         @default(now()) @updatedAt
+
+  empresa    Empresa     @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  plano      Plano       @relation(fields: [plano_id], references: [id])
+  pagamentos Pagamento[]
+
+  @@index([empresa_id])
+  @@map("assinaturas")
+}
+
+model Pagamento {
+  id                BigInt          @id @default(autoincrement())
+  assinatura_id     BigInt
+  empresa_id        BigInt
+  valor             Decimal         @db.Decimal(10, 2)
+  status            PagamentoStatus @default(pendente)
+  data_vencimento   DateTime
+  data_pagamento    DateTime?
+  metodo_pagamento  String?
+  referencia        String?
+  asaas_payment_id  String?
+  asaas_invoice_url String?
+  asaas_pix_qrcode  String?
+  asaas_pix_payload String?
+  asaas_boleto_url  String?
+  observacoes       String?
+  created_at        DateTime        @default(now())
+
+  assinatura Assinatura @relation(fields: [assinatura_id], references: [id], onDelete: Cascade)
+  empresa    Empresa    @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+
+  @@index([asaas_payment_id])
+  @@index([empresa_id])
+  @@map("pagamentos")
+}

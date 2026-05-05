@@ -1,8 +1,9 @@
 /**
- * Validação de números WhatsApp via Evolution API
- * Configurações vêm do banco de dados (configuracoes_integracoes)
+ * Validação de números WhatsApp via Evolution API.
+ * Agora chama o backend (que repassa pra Evolution) — sem CORS.
  */
 
+import { api } from "./api";
 import { getIntegracoesConfig, getCachedConfig } from "./integracoes-config";
 
 export interface WhatsAppValidationMap {
@@ -13,19 +14,13 @@ export interface WhatsAppValidationMap {
   };
 }
 
-async function getConfig() {
-  const cfg = await getIntegracoesConfig();
-  return {
-    baseUrl: cfg.evolution_api_url.trim(),
-    instance: cfg.evolution_api_instance.trim(),
-    apiKey: cfg.evolution_api_key.trim(),
-    authHeader: "apikey",
-  };
-}
-
 export function hasWhatsAppConfig(): boolean {
   const cfg = getCachedConfig();
-  return Boolean(cfg.evolution_api_url.trim() && cfg.evolution_api_instance.trim() && cfg.evolution_api_key.trim());
+  return Boolean(
+    cfg.evolution_api_url.trim() &&
+      cfg.evolution_api_instance.trim() &&
+      cfg.evolution_api_key.trim()
+  );
 }
 
 function extractPhoneNumbers(results: { phone?: string; telefone?: string }[]): string[] {
@@ -49,27 +44,13 @@ export async function validateWhatsAppNumbers(
   const numbers = extractPhoneNumbers(results);
   if (numbers.length === 0) return {};
 
-  const { baseUrl, instance, apiKey, authHeader } = await getConfig();
-  if (!baseUrl || !instance || !apiKey) return {};
+  // Garante que o cache da config global está populado (para hasWhatsAppConfig)
+  await getIntegracoesConfig();
 
-  const url = `${baseUrl.replace(/\/$/, "")}/chat/whatsappNumbers/${instance}`;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [authHeader]: apiKey,
-      },
-      body: JSON.stringify({ numbers }),
-    });
-
-    if (!res.ok) return {};
-
-    const data = (await res.json()) as Array<{
-      number?: string | number;
-      exists?: boolean;
-      jid?: string | null;
-    }>;
+    const data = await api.post<
+      Array<{ number?: string | number; exists?: boolean; jid?: string | null }>
+    >("/api/proxy/whatsapp/check", { numbers });
 
     const map: WhatsAppValidationMap = {};
     for (const item of data ?? []) {

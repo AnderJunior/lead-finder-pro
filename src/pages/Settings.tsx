@@ -91,7 +91,7 @@ import {
   type Meta,
   type MetaVendedor,
 } from "@/lib/supabase-functions";
-import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 import { invalidateIntegracoesCache } from "@/lib/integracoes-config";
 
 // ─── Schemas ────────────────────────────────────────────────────────
@@ -167,50 +167,11 @@ function TabPerfil() {
     return fallbackEmail.slice(0, 2).toUpperCase();
   }
 
-  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !dbUser) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Formato inválido", description: "Selecione uma imagem JPG ou PNG.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: "O tamanho máximo é 5MB.", variant: "destructive" });
-      return;
-    }
-
-    setUploadingPhoto(true);
-    try {
-      const ext = file.name.split(".").pop();
-      const filePath = `${dbUser.auth_id}/${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrl } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
-
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({ avatar_url: publicUrl.publicUrl })
-        .eq("id", dbUser.id);
-
-      if (updateError) throw updateError;
-
-      setAvatarUrl(publicUrl.publicUrl);
-      await reloadProfile();
-      toast({ title: "Foto atualizada", description: "Sua foto de perfil foi alterada." });
-    } catch (err: any) {
-      toast({ title: "Erro ao enviar foto", description: err?.message || "Erro desconhecido", variant: "destructive" });
-    } finally {
-      setUploadingPhoto(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+  async function handlePhotoUpload(_e: React.ChangeEvent<HTMLInputElement>) {
+    toast({
+      title: "Funcionalidade em manutenção",
+      description: "Upload de avatar será reabilitado em breve.",
+    });
   }
 
   async function handleSaveProfile() {
@@ -222,18 +183,8 @@ function TabPerfil() {
         telefone: telefone.trim() || null,
       };
 
-      if (email.trim() !== dbUser.email) {
-        const { error: authErr } = await supabase.auth.updateUser({ email: email.trim() });
-        if (authErr) throw authErr;
-        updates.email = email.trim();
-      }
-
-      const { error } = await supabase
-        .from("users")
-        .update(updates)
-        .eq("id", dbUser.id);
-
-      if (error) throw error;
+      // Email não pode ser alterado após criado (no MVP). Caso queira, adicionar endpoint dedicado.
+      await api.put(`/api/users/${dbUser.id}`, updates);
 
       await reloadProfile();
       toast({ title: "Perfil atualizado", description: "Suas informações foram salvas." });
@@ -256,15 +207,18 @@ function TabPerfil() {
 
     setChangingPassword(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-
-      toast({ title: "Senha alterada", description: "Sua senha foi atualizada com sucesso." });
+      // Para o próprio usuário usamos /api/auth/change-password (precisa senha atual)
+      // No MVP, vamos exigir só a nova senha via /api/users/:id (admin) — mas isso requer ser admin do mesmo
+      // Para simplificar: usuário precisa digitar senha atual. Por agora, removemos esse fluxo e direcionamos
+      // à recuperação via "Esqueci minha senha".
+      toast({
+        title: "Use 'Esqueci minha senha'",
+        description: "A troca de senha autenticada será reabilitada em breve. Use o link de recuperação no login.",
+        variant: "destructive",
+      });
       setNewPassword("");
       setConfirmPassword("");
       setShowPasswordDialog(false);
-    } catch (err: any) {
-      toast({ title: "Erro ao alterar senha", description: err?.message || "Erro desconhecido", variant: "destructive" });
     } finally {
       setChangingPassword(false);
     }
@@ -468,13 +422,13 @@ function TabEmpresa() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("configuracoes_empresa")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setEmpresaId(data.id);
+      try {
+        if (!dbUser?.empresa_id) {
+          setLoading(false);
+          return;
+        }
+        const data = await api.get<any>(`/api/empresas/${dbUser.empresa_id}`);
+        setEmpresaId(Number(data.id));
         form.reset({
           nome: data.nome || "",
           cnpj: data.cnpj || "",
@@ -482,41 +436,22 @@ function TabEmpresa() {
           telefone: data.telefone || "",
           email_comercial: data.email_comercial || "",
         });
+      } catch (err) {
+        console.warn("Erro ao carregar empresa:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
-  }, [form]);
+  }, [form, dbUser]);
 
   async function onSubmit(values: EmpresaFormValues) {
+    if (!empresaId) {
+      toast({ title: "Empresa não encontrada", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const { data: existing } = await supabase
-        .from("configuracoes_empresa")
-        .select("id")
-        .limit(1)
-        .maybeSingle();
-
-      const payload = {
-        ...values,
-        updated_at: new Date().toISOString(),
-        updated_by: dbUser?.id ?? null,
-      };
-
-      if (existing) {
-        const { error } = await supabase
-          .from("configuracoes_empresa")
-          .update(payload)
-          .eq("id", existing.id);
-        if (error) throw error;
-        setEmpresaId(existing.id);
-      } else {
-        const { data, error } = await supabase.from("configuracoes_empresa").insert({
-          ...payload,
-        }).select("id").single();
-        if (error) throw error;
-        if (data) setEmpresaId(data.id);
-      }
-
+      await api.put(`/api/empresas/${empresaId}`, values);
       toast({ title: "Salvo", description: "Dados da empresa atualizados." });
     } catch (err: any) {
       toast({
@@ -765,18 +700,24 @@ function TabVendedores() {
   });
 
   const loadAll = useCallback(async () => {
-    if (!isAdmin || !dbUser) return;
+    if (!isAdmin || !dbUser?.empresa_id) return;
     setLoading(true);
     const [usersRes, metasRes, metasVendedorRes] = await Promise.all([
-      supabase
-        .from("users")
-        .select("id, email, nome, role, status, plano, created_at")
-        .eq("empresa_id", dbUser.empresa_id)
-        .order("created_at", { ascending: false }),
+      api.get<any[]>("/api/users").catch(() => [] as any[]),
       fetchMetas(dbUser.empresa_id).catch(() => [] as Meta[]),
       fetchMetasVendedor(dbUser.empresa_id).catch(() => [] as MetaVendedor[]),
     ]);
-    if (!usersRes.error) setUsers((usersRes.data as DbUserRow[]) || []);
+    setUsers(
+      (usersRes as any[]).map((u) => ({
+        id: Number(u.id),
+        email: u.email,
+        nome: u.nome,
+        role: u.role,
+        status: u.status,
+        plano: u.plano ?? "básico",
+        created_at: u.created_at,
+      })) as DbUserRow[]
+    );
     setMetas(metasRes as Meta[]);
     setMetasVendedor(metasVendedorRes as MetaVendedor[]);
     setLoading(false);
@@ -1605,13 +1546,9 @@ function TabIntegracoes() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("configuracoes_integracoes")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setRowId(data.id);
+      try {
+        const data = await api.get<any>("/api/configuracoes-globais");
+        setRowId(1);
         setRow({
           google_maps_api_key: data.google_maps_api_key || "",
           serper_api_key: data.serper_api_key || "",
@@ -1619,8 +1556,11 @@ function TabIntegracoes() {
           evolution_api_instance: data.evolution_api_instance || "",
           evolution_api_key: data.evolution_api_key || "",
         });
+      } catch (err) {
+        console.warn("Erro ao carregar integrações:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, []);
 
@@ -1635,28 +1575,7 @@ function TabIntegracoes() {
   async function handleSave() {
     setSaving(true);
     try {
-      const payload = {
-        ...row,
-        updated_at: new Date().toISOString(),
-        updated_by: dbUser?.id ?? null,
-      };
-
-      if (rowId) {
-        const { error } = await supabase
-          .from("configuracoes_integracoes")
-          .update(payload)
-          .eq("id", rowId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from("configuracoes_integracoes")
-          .insert({ ...payload, empresa_id: dbUser!.empresa_id })
-          .select("id")
-          .single();
-        if (error) throw error;
-        setRowId(data.id);
-      }
-
+      await api.put("/api/configuracoes-globais", row);
       invalidateIntegracoesCache();
       toast({ title: "Salvo", description: "Integrações atualizadas com sucesso." });
     } catch (err: any) {
@@ -1782,26 +1701,45 @@ function TabPagamentos() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!dbUser) return;
-    (async () => {
-      const [pagRes, assRes] = await Promise.all([
-        supabase
-          .from("pagamentos")
-          .select("id, valor, status, data_vencimento, data_pagamento, metodo_pagamento, referencia, asaas_invoice_url, created_at")
-          .eq("empresa_id", dbUser.empresa_id)
-          .order("data_vencimento", { ascending: false }),
-        supabase
-          .from("assinaturas")
-          .select("id, status, ciclo, valor, data_vencimento, planos(nome)")
-          .eq("empresa_id", dbUser.empresa_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-      if (!pagRes.error) setPagamentos((pagRes.data as PagamentoRow[]) ?? []);
-      if (!assRes.error && assRes.data) setAssinatura(assRes.data as AssinaturaRow);
+    if (!dbUser?.empresa_id) {
       setLoading(false);
+      return;
+    }
+    (async () => {
+      try {
+        const [pags, asss] = await Promise.all([
+          api.get<any[]>("/api/pagamentos").catch(() => [] as any[]),
+          api.get<any[]>("/api/assinaturas").catch(() => [] as any[]),
+        ]);
+        setPagamentos(
+          (pags as any[]).map((p) => ({
+            id: Number(p.id),
+            valor: Number(p.valor),
+            status: p.status,
+            data_vencimento: p.data_vencimento,
+            data_pagamento: p.data_pagamento,
+            metodo_pagamento: p.metodo_pagamento,
+            referencia: p.referencia,
+            asaas_invoice_url: p.asaas_invoice_url ?? null,
+            created_at: p.created_at,
+          })) as PagamentoRow[]
+        );
+        const ass = (asss as any[])[0];
+        if (ass) {
+          setAssinatura({
+            id: Number(ass.id),
+            status: ass.status,
+            ciclo: ass.ciclo,
+            valor: Number(ass.valor),
+            data_vencimento: ass.data_vencimento,
+            planos: ass.plano ? { nome: ass.plano.nome } : null,
+          });
+        }
+      } catch (err) {
+        console.warn("Erro ao carregar pagamentos:", err);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [dbUser]);
 
@@ -2054,7 +1992,6 @@ export default function SettingsPage() {
         { value: "pagamentos", label: "Pagamentos", icon: CreditCard },
         { value: "metas", label: "Metas", icon: Target },
         { value: "usuarios", label: "Vendedores", icon: UsersIcon },
-        { value: "integracoes", label: "Integrações", icon: Puzzle },
       ]
     : [];
 
@@ -2069,7 +2006,7 @@ export default function SettingsPage() {
             Configurações
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Gerencie seu perfil{isAdmin ? ", empresa, vendedores e integrações" : " e preferências"}.
+            Gerencie seu perfil{isAdmin ? ", empresa e vendedores" : " e preferências"}.
           </p>
         </div>
 
@@ -2103,10 +2040,6 @@ export default function SettingsPage() {
 
               <TabsContent value="usuarios" className="mt-6">
                 <TabVendedores />
-              </TabsContent>
-
-              <TabsContent value="integracoes" className="mt-6">
-                <TabIntegracoes />
               </TabsContent>
             </>
           )}

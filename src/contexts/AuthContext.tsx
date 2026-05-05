@@ -6,20 +6,19 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import type { User as AuthUser, Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { api, ApiError } from "@/lib/api";
 
 export interface DbUser {
   id: number;
   email: string;
   nome: string | null;
   status: string;
-  plano: string;
+  plano?: string;
   role: string | null;
-  auth_id: string | null;
-  empresa_id: number;
+  empresa_id: number | null;
   avatar_url: string | null;
   telefone: string | null;
+  onboarding_video_watched: boolean;
   empresa_ativo?: boolean;
   empresa_nome?: string | null;
   assinatura_status?: string | null;
@@ -27,17 +26,19 @@ export interface DbUser {
   fatura_url?: string | null;
 }
 
+interface AuthSession {
+  userId: number;
+  email: string;
+}
+
 interface AuthContextType {
-  session: Session | null;
-  authUser: AuthUser | null;
+  session: AuthSession | null;
+  authUser: AuthSession | null;
   dbUser: DbUser | null;
   loading: boolean;
   isPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
-  signIn: (
-    email: string,
-    password: string
-  ) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   reloadProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -47,33 +48,31 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), ms)
-    ),
-  ]);
-}
-
-async function fetchProfile(): Promise<DbUser | null> {
-  // Usa RPC get_my_profile (contorna problema com tabela "user" - palavra reservada)
-  try {
-    const { data, error } = await withTimeout(
-      supabase.rpc("get_my_profile"),
-      4000
-    );
-    if (!error && data) return data as DbUser;
-  } catch {
-    // RPC não existe ou timeout
-  }
-
-  return null;
+function normalizeUser(raw: any): DbUser | null {
+  if (!raw) return null;
+  const empresa = raw.empresa;
+  const ultimaAss = empresa?.assinaturas?.[0];
+  return {
+    id: Number(raw.id),
+    email: raw.email,
+    nome: raw.nome ?? null,
+    status: raw.status ?? "ativo",
+    plano: raw.plano ?? "básico",
+    role: raw.role ?? "user",
+    empresa_id: raw.empresa_id != null ? Number(raw.empresa_id) : null,
+    avatar_url: raw.avatar_url ?? null,
+    telefone: raw.telefone ?? null,
+    onboarding_video_watched: !!raw.onboarding_video_watched,
+    empresa_ativo: empresa?.ativo,
+    empresa_nome: empresa?.nome ?? null,
+    assinatura_status: ultimaAss?.status ?? null,
+    assinatura_vencimento: ultimaAss?.data_vencimento ?? null,
+    fatura_url: ultimaAss?.pagamentos?.[0]?.asaas_invoice_url ?? null,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [dbUser, setDbUser] = useState<DbUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -83,57 +82,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProfile = useCallback(async () => {
-    const profile = await fetchProfile();
-    setDbUser(profile);
+    try {
+      const { user } = await api.get<{ user: any }>("/api/auth/me");
+      const normalized = normalizeUser(user);
+      setDbUser(normalized);
+      if (normalized) {
+        setSession({ userId: normalized.id, email: normalized.email });
+      } else {
+        setSession(null);
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setDbUser(null);
+        setSession(null);
+      } else {
+        console.warn("Erro ao carregar perfil:", err);
+      }
+    }
   }, []);
 
   useEffect(() => {
     let ignore = false;
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (ignore) return;
-
-      if (event === "PASSWORD_RECOVERY") {
-        setIsPasswordRecovery(true);
-      }
-
-      setSession(newSession);
-      setAuthUser(newSession?.user ?? null);
-      setLoading(false);
-
-      if (newSession?.user) {
-        loadProfile();
-      } else {
-        setDbUser(null);
-      }
-    });
-
-    // Segurança: se onAuthStateChange não disparar em 3s, libera
-    const safety = setTimeout(() => {
+    (async () => {
+      await loadProfile();
       if (!ignore) setLoading(false);
-    }, 3000);
-
+    })();
     return () => {
       ignore = true;
-      clearTimeout(safety);
-      subscription.unsubscribe();
     };
   }, [loadProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error: error as Error | null };
-  }, []);
+    try {
+      const { user } = await api.post<{ user: any }>("/api/auth/login", { email, password });
+      const normalized = normalizeUser(user);
+      setDbUser(normalized);
+      if (normalized) setSession({ userId: normalized.id, email: normalized.email });
+      // recarrega perfil completo (com empresa/assinatura)
+      await loadProfile();
+      return { error: null };
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Erro ao entrar";
+      return { error: new Error(message) };
+    }
+  }, [loadProfile]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await api.post("/api/auth/logout");
+    } catch {
+      /* ignore */
+    }
     setSession(null);
-    setAuthUser(null);
     setDbUser(null);
   }, []);
 
@@ -147,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     session,
-    authUser,
+    authUser: session,
     dbUser,
     loading,
     isPasswordRecovery,

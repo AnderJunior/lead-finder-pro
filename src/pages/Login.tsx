@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -97,25 +97,29 @@ export default function Login() {
   async function onForgotSubmit(values: ForgotFormValues) {
     setIsSendingReset(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const r = await api.post<{ ok: boolean; token?: string }>("/api/password-reset/request", {
+        email: values.email,
       });
-
-      if (error) {
+      if (r.token) {
+        // ambiente dev: backend retorna o token (em prod seria por email)
         toast({
-          title: "Erro ao enviar e-mail",
-          description: error.message,
-          variant: "destructive",
+          title: "Token de reset gerado",
+          description: `Use o link: ${window.location.origin}/reset-password?token=${r.token}`,
         });
-        return;
+      } else {
+        toast({
+          title: "E-mail enviado!",
+          description: "Se o email existir, você receberá o link de redefinição.",
+        });
       }
-
-      toast({
-        title: "E-mail enviado!",
-        description: "Verifique sua caixa de entrada para redefinir a senha.",
-      });
       setShowForgot(false);
       forgotForm.reset();
+    } catch (err: any) {
+      toast({
+        title: "Erro ao enviar e-mail",
+        description: err?.message || "Erro desconhecido",
+        variant: "destructive",
+      });
     } finally {
       setIsSendingReset(false);
     }

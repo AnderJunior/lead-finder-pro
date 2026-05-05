@@ -55,6 +55,7 @@ export interface UseLeadsSearchReturn extends UseLeadsSearchState {
   selectAll: () => void;
   clearSelection: () => void;
   clearAllSelections: () => void;
+  refreshCaptados: () => Promise<void>;
   reset: () => void;
   hasSerper: boolean;
   hasWhatsApp: boolean;
@@ -280,24 +281,24 @@ export function useLeadsSearch(): UseLeadsSearchReturn {
     [state.capturedCoordinates, applyFilters, dbUser]
   );
 
-  const loadNextPage = useCallback(() => {
+  const loadNextPage = useCallback(async () => {
     if (!state.hasMore || state.loading) return;
     const nextPage = state.currentPage + 1;
     if (state.searchSource === "google") {
-      search(state.searchTerm, state.searchLocation, nextPage);
-    } else {
-      setState((s) => {
-        const pageData = s.pagesData[nextPage] ?? [];
-        const filtered = applyFilters(pageData, s.filters);
-        return {
-          ...s,
-          currentPage: nextPage,
-          filteredLeads: filtered,
-          hasMore: nextPage < Object.keys(s.pagesData).length,
-        };
-      });
+      await search(state.searchTerm, state.searchLocation, nextPage);
+      return;
     }
-  }, [state.hasMore, state.loading, state.searchTerm, state.searchLocation, state.currentPage, state.searchSource, search, applyFilters]);
+    setState((s) => {
+      const pageData = s.pagesData[nextPage] ?? [];
+      const filtered = applyFilters(pageData, s.filters);
+      return {
+        ...s,
+        currentPage: nextPage,
+        filteredLeads: filtered,
+        hasMore: nextPage < Object.keys(s.pagesData).length,
+      };
+    });
+  }, [state.hasMore, state.loading, state.searchTerm, state.searchLocation, state.currentPage, state.searchSource, state.pagesData, search, applyFilters]);
 
   const loadPrevPage = useCallback(() => {
     if (state.currentPage <= 1) return;

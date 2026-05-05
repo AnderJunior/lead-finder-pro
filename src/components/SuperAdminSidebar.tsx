@@ -6,19 +6,19 @@ import {
   LayoutDashboard,
   Building2,
   CreditCard,
-  Receipt,
   LogOut,
   Package,
   Headphones,
+  Puzzle,
 } from "lucide-react";
 import { SupportDialog } from "@/components/SupportDialog";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
   { icon: Building2, label: "Empresas", path: "/admin/empresas" },
-  { icon: Receipt, label: "Assinaturas", path: "/admin/assinaturas" },
   { icon: CreditCard, label: "Financeiro", path: "/admin/financeiro" },
   { icon: Package, label: "Planos", path: "/admin/planos" },
+  { icon: Puzzle, label: "Integrações", path: "/admin/integracoes" },
 ];
 
 export function SuperAdminSidebar() {

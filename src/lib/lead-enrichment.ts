@@ -3,13 +3,7 @@
  * Busca informações do decisor e da empresa usando buscas orgânicas do Google
  */
 
-import { getIntegracoesConfig } from "./integracoes-config";
-
-const SERPER_BASE = "https://google.serper.dev";
-const CORS_PROXIES = [
-  "https://api.codetabs.com/v1/proxy?quest=",
-  "https://corsproxy.io/?",
-];
+import { api } from "./api";
 
 export interface LeadEnrichmentResult {
   /** Telefone principal da empresa (preenche lead.telefone se vazio) */
@@ -145,57 +139,13 @@ function limparUrl(url: string): string {
   }
 }
 
-async function getApiKey(): Promise<string> {
-  const config = await getIntegracoesConfig();
-  const key = config.serper_api_key;
-  if (!key) throw new Error("Configure a chave da Serper API nas configurações do sistema.");
-  return key;
-}
-
-async function fetchWithCors(
-  url: string,
-  options: RequestInit,
-  apiKey: string
-): Promise<Response> {
-  try {
-    const res = await fetch(url, options);
-    if (res.ok) return res;
-  } catch {
-    // fallback proxy
-  }
-  const proxy = CORS_PROXIES[0];
-  return fetch(`${proxy}${encodeURIComponent(url)}`, {
-    ...options,
-    headers: { ...(options.headers as Record<string, string>), "X-API-KEY": apiKey },
-  });
-}
-
 async function searchSerperOrganic(
   query: string,
   page: number = 1
 ): Promise<{ title: string; link: string; snippet: string }[]> {
-  const apiKey = await getApiKey();
-  const url = `${SERPER_BASE}/search`;
-  const body = { q: query, gl: "br", hl: "pt-br", page };
-
-  const res = await fetchWithCors(
-    url,
-    {
-      method: "POST",
-      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    apiKey
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Serper API: ${res.status} - ${text}`);
-  }
-
-  const data = (await res.json()) as {
+  const data = await api.post<{
     organic?: Array<{ title?: string; link?: string; snippet?: string }>;
-  };
+  }>("/api/proxy/serper/search", { q: query, gl: "br", hl: "pt-br", num: 10 } as any);
   const organic = data.organic ?? [];
   return organic.map((o) => ({
     title: o.title ?? "",

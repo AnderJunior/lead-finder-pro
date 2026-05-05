@@ -1,19 +1,50 @@
-import { createClient } from "@supabase/supabase-js";
+/**
+ * Stub do antigo cliente Supabase.
+ * O sistema agora usa o backend próprio (src/lib/api.ts) e Prisma no servidor.
+ * Este arquivo existe apenas para evitar quebrar imports legados;
+ * todas as funções de acesso a dados foram reescritas em supabase-functions.ts
+ * usando o cliente `api`.
+ */
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    "Supabase não configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env"
+function notSupported(op: string): never {
+  throw new Error(
+    `Operação Supabase "${op}" não suportada. O sistema migrou para backend próprio. Use src/lib/api.ts.`
   );
 }
 
-export const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "");
+const stubBuilder: any = new Proxy(
+  {},
+  {
+    get(_t, prop) {
+      if (prop === "then") return undefined;
+      return () => stubBuilder;
+    },
+    apply() {
+      return Promise.resolve({ data: null, error: { message: "Supabase desativado" } });
+    },
+  }
+);
 
-export const supabaseAdmin = supabaseServiceRoleKey
-  ? createClient(supabaseUrl || "", supabaseServiceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-  : null;
+export const supabase: any = {
+  from: () => stubBuilder,
+  rpc: () => stubBuilder,
+  auth: {
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+    getSession: async () => ({ data: { session: null }, error: null }),
+    signInWithPassword: () => notSupported("auth.signInWithPassword"),
+    signOut: async () => ({ error: null }),
+    updateUser: () => notSupported("auth.updateUser"),
+    resetPasswordForEmail: () => notSupported("auth.resetPasswordForEmail"),
+  },
+  storage: {
+    from: () => ({
+      upload: () => notSupported("storage.upload"),
+      getPublicUrl: () => ({ data: { publicUrl: "" } }),
+    }),
+  },
+  functions: {
+    invoke: () => notSupported("functions.invoke"),
+  },
+};
+
+export const supabaseAdmin: any = null;

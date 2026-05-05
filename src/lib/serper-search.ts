@@ -1,15 +1,9 @@
 /**
  * Serviço de busca de empresas via Serper Maps API
- * Suporta paginação real (carregar página a página)
+ * Agora chama o backend (que repassa pra Serper) — sem CORS.
  */
 
-import { getIntegracoesConfig } from "./integracoes-config";
-
-const SERPER_BASE = "https://google.serper.dev";
-const CORS_PROXIES = [
-  "https://api.codetabs.com/v1/proxy?quest=",
-  "https://corsproxy.io/?",
-];
+import { api } from "./api";
 
 export interface SerperPlaceResult {
   id: string;
@@ -34,37 +28,11 @@ export interface SerperMapsResponse {
   hasMore: boolean;
 }
 
-async function getApiKey(): Promise<string> {
-  const config = await getIntegracoesConfig();
-  const key = config.serper_api_key;
-  if (!key) throw new Error("Configure a chave da Serper API nas configurações do sistema.");
-  return key;
-}
-
-async function fetchWithCors(
-  url: string,
-  options: RequestInit,
-  apiKey: string
-): Promise<Response> {
-  try {
-    const res = await fetch(url, options);
-    if (res.ok) return res;
-  } catch {
-    // fallback proxy
-  }
-  const proxy = CORS_PROXIES[0];
-  return fetch(`${proxy}${encodeURIComponent(url)}`, {
-    ...options,
-    headers: { ...options.headers, "X-API-KEY": apiKey },
-  });
-}
-
 export async function searchSerperMaps(
   query: string,
   page: number = 1,
   coordinates?: string
 ): Promise<SerperMapsResponse> {
-  const apiKey = await getApiKey();
   const body: Record<string, unknown> = {
     q: query.trim(),
     hl: "pt-br",
@@ -74,22 +42,7 @@ export async function searchSerperMaps(
     body.ll = coordinates;
   }
 
-  const url = `${SERPER_BASE}/maps`;
-  const res = await fetchWithCors(url, {
-    method: "POST",
-    headers: {
-      "X-API-KEY": apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  }, apiKey);
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Serper API: ${res.status} - ${text}`);
-  }
-
-  const data = (await res.json()) as {
+  const data = await api.post<{
     places?: Array<{
       placeId?: string;
       title?: string;
@@ -104,7 +57,7 @@ export async function searchSerperMaps(
     }>;
     searchParameters?: { ll?: string };
     searchMetadata?: { ll?: string };
-  };
+  }>("/api/proxy/serper/maps", body);
 
   const places = data.places ?? [];
   let capturedCoords: string | null = null;

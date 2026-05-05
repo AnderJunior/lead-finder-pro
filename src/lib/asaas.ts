@@ -1,31 +1,9 @@
-import { supabase } from "./supabase";
+/**
+ * Stub — integração Asaas removida na migração para backend próprio.
+ * Pagamentos são gerenciados manualmente pelo super admin.
+ */
 
-async function callAsaasProxy(action: string, data: Record<string, any> = {}) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  if (!token) throw new Error("Usuário não autenticado");
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/asaas-proxy`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      apikey: supabaseAnonKey,
-    },
-    body: JSON.stringify({ action, ...data }),
-  });
-
-  const body = await res.json();
-  if (!res.ok) {
-    throw new Error(body?.error || "Erro na comunicação com Asaas");
-  }
-  return body;
-}
-
-export async function createCustomerAndSubscription(data: {
+export async function createCustomerAndSubscription(_data: {
   empresa_id: number;
   assinatura_id: number;
   nome: string;
@@ -37,20 +15,18 @@ export async function createCustomerAndSubscription(data: {
   data_vencimento: string;
   plano_nome?: string;
 }): Promise<{ customer_id: string; subscription_id: string }> {
-  return callAsaasProxy("create_customer_subscription", data);
+  return { customer_id: "", subscription_id: "" };
 }
 
-export async function updateAsaasSubscription(data: {
+export async function updateAsaasSubscription(_data: {
   asaas_subscription_id: string;
   valor?: number;
   ciclo?: string;
   data_vencimento?: string;
 }): Promise<void> {
-  await callAsaasProxy("update_subscription", data);
+  // no-op
 }
 
-export async function cancelAsaasSubscription(
-  asaas_subscription_id: string
-): Promise<void> {
-  await callAsaasProxy("cancel_subscription", { asaas_subscription_id });
+export async function cancelAsaasSubscription(_asaas_subscription_id: string): Promise<void> {
+  // no-op
 }

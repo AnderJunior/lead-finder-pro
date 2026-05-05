@@ -51,6 +51,7 @@ import { enrichLead } from "@/lib/lead-enrichment";
 import {
   fetchLeadById,
   atualizarLead,
+  enriquecerLeadNoBackend,
   fetchFunilEtapas,
   fetchFunilLogsByLead,
   moverLeadEtapa,
@@ -307,9 +308,7 @@ const LeadDetails = () => {
 
       // Preenche apenas campos em branco
       const v = (x: string | null | undefined) => !x?.trim();
-      const updates: Record<string, unknown> = {
-        decisor_enriquecido_em: new Date().toISOString(),
-      };
+      const updates: Record<string, unknown> = {};
       if (v(lead.telefone) && result.telefone) updates.telefone = result.telefone;
       if (v(lead.email) && result.email) updates.email = result.email;
       if (v(lead.website) && result.website) updates.website = result.website;
@@ -322,7 +321,9 @@ const LeadDetails = () => {
       if (v(lead.facebook_url) && result.facebook_url) updates.facebook_url = result.facebook_url;
       if (v(lead.instagram_url) && result.instagram_url) updates.instagram_url = result.instagram_url;
 
-      await atualizarLead(lead.id, updates as any);
+      // Endpoint de enriquecimento debita 2 créditos e marca decisor_enriquecido_em
+      await enriquecerLeadNoBackend(lead.id, updates as any);
+      updates.decisor_enriquecido_em = new Date().toISOString();
       const decisorEnriquecidoEm = new Date().toISOString();
       setForm((f) => ({
         ...f,
@@ -339,14 +340,13 @@ const LeadDetails = () => {
         instagram_url: (updates.instagram_url as string) ?? f.instagram_url,
       }));
       setLead((prev) => ({ ...prev, ...updates, decisor_enriquecido_em: decisorEnriquecidoEm } as LeadCaptadoComTarefas));
-      const found = Object.keys(updates).length > 1;
       const qtdPreenchidos = Object.keys(updates).filter((k) => k !== "decisor_enriquecido_em").length;
+      const found = qtdPreenchidos > 0;
       toast({
-        title: found ? "Lead enriquecido" : "Nenhum dado novo encontrado",
+        title: found ? "Lead enriquecido (-2 créditos)" : "Nenhum dado novo encontrado (-2 créditos)",
         description: found
           ? `${qtdPreenchidos} campo(s) em branco foram preenchidos com as informações encontradas.`
           : "Nenhum campo vazio pôde ser preenchido. Tente editar manualmente.",
-        variant: found ? "default" : "default",
       });
       await carregarDados(true);
     } catch (err) {
@@ -415,7 +415,9 @@ const LeadDetails = () => {
         descricao: novaTarefaTexto.trim(),
         data_vencimento: parseDataHoraInput(prazoInputValue) || null,
         concluida: false,
-        empresa_id: dbUser.empresa_id,
+        concluida_em: null,
+        concluida_por_user_id: null,
+        empresa_id: dbUser.empresa_id ?? 0,
       });
       setLead({ ...lead, funil_tarefas: [...lead.funil_tarefas, tarefa] });
       setNovaTarefaTexto("");
