@@ -44,7 +44,14 @@ interface RequestOptions {
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(path.startsWith("http") ? path : `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`);
+  // Em produção, API_BASE = "" → usa same-origin via window.location.origin
+  const base =
+    API_BASE ||
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost");
+  const fullUrl = path.startsWith("http")
+    ? path
+    : `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+  const url = new URL(fullUrl);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
