@@ -1,5 +1,6 @@
 # ===== BUILD =====
 FROM node:20-alpine AS builder
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -11,6 +12,7 @@ RUN npm run build
 
 # ===== RUNTIME =====
 FROM node:20-alpine
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production
 
