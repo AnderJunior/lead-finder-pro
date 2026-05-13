@@ -26,6 +26,7 @@ import SuperAdminPlanos from "./pages/admin/SuperAdminPlanos";
 import SuperAdminFinanceiro from "./pages/admin/SuperAdminFinanceiro";
 import SuperAdminEmpresaDetalhes from "./pages/admin/SuperAdminEmpresaDetalhes";
 import SuperAdminIntegracoes from "./pages/admin/SuperAdminIntegracoes";
+import SuperAdminAdministradores from "./pages/admin/SuperAdminAdministradores";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/admin/planos" element={<SuperAdminRoute><SuperAdminPlanos /></SuperAdminRoute>} />
             <Route path="/admin/financeiro" element={<SuperAdminRoute><SuperAdminFinanceiro /></SuperAdminRoute>} />
             <Route path="/admin/integracoes" element={<SuperAdminRoute><SuperAdminIntegracoes /></SuperAdminRoute>} />
+            <Route path="/admin/administradores" element={<SuperAdminRoute><SuperAdminAdministradores /></SuperAdminRoute>} />
 
             {/* App normal */}
             <Route

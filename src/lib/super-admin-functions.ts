@@ -498,3 +498,61 @@ export async function adicionarCreditosEmpresa(empresaId: number, amount: number
 export async function definirCreditosEmpresa(empresaId: number, amount: number): Promise<{ creditos: number }> {
   return api.post<{ creditos: number }>(`/api/empresas/${empresaId}/creditos/definir`, { amount });
 }
+
+// ─── Administradores (super_admin) ──────────────────────────────────
+
+export interface Administrador {
+  id: number;
+  email: string;
+  nome: string | null;
+  telefone: string | null;
+  avatar_url: string | null;
+  status: string;
+  role: string;
+  created_at: string;
+}
+
+function asAdmin(raw: any): Administrador {
+  return {
+    id: n(raw.id),
+    email: raw.email,
+    nome: raw.nome ?? null,
+    telefone: raw.telefone ?? null,
+    avatar_url: raw.avatar_url ?? null,
+    status: raw.status ?? "ativo",
+    role: raw.role ?? "super_admin",
+    created_at: raw.created_at,
+  };
+}
+
+export async function fetchAdministradores(): Promise<Administrador[]> {
+  const data = await api.get<any[]>("/api/administradores");
+  return data.map(asAdmin);
+}
+
+export async function criarAdministrador(payload: {
+  nome: string;
+  email: string;
+  password: string;
+  telefone?: string | null;
+}): Promise<Administrador> {
+  const r = await api.post<any>("/api/administradores", payload);
+  return asAdmin(r);
+}
+
+export async function atualizarAdministrador(
+  id: number,
+  payload: {
+    nome?: string;
+    telefone?: string | null;
+    status?: "ativo" | "inativo";
+    password?: string;
+  }
+): Promise<Administrador> {
+  const r = await api.put<any>(`/api/administradores/${id}`, payload);
+  return asAdmin(r);
+}
+
+export async function deletarAdministrador(id: number): Promise<void> {
+  await api.delete(`/api/administradores/${id}`);
+}

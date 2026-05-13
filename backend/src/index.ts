@@ -19,6 +19,7 @@ import pagamentosRoutes from "./routes/pagamentos.js";
 import rankingRoutes from "./routes/ranking.js";
 import proxiesRoutes from "./routes/proxies.js";
 import pacotesCreditosRoutes from "./routes/pacotes-creditos.js";
+import administradoresRoutes from "./routes/administradores.js";
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/pagamentos", pagamentosRoutes);
 app.use("/api/ranking", rankingRoutes);
 app.use("/api/proxy", proxiesRoutes);
 app.use("/api/pacotes-creditos", pacotesCreditosRoutes);
+app.use("/api/administradores", administradoresRoutes);
 
 // 404
 app.use((req, res) => {

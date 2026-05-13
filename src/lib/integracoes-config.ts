@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, ApiError } from "./api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface IntegracoesConfig {
   google_maps_api_key: string;
@@ -71,8 +72,9 @@ export async function invalidateIntegracoesCache(): Promise<void> {
 }
 
 export function useIntegracoesConfig() {
+  const { dbUser } = useAuth();
   const [config, setConfig] = useState<IntegracoesConfig>(cachedConfig ?? EMPTY_CONFIG);
-  const [loading, setLoading] = useState(!cachedConfig);
+  const [loading, setLoading] = useState(!cachedConfig && !!dbUser);
 
   const load = useCallback(() => {
     getIntegracoesConfig().then((cfg) => {
@@ -82,6 +84,11 @@ export function useIntegracoesConfig() {
   }, []);
 
   useEffect(() => {
+    // Só carrega se o usuário estiver autenticado
+    if (!dbUser) {
+      setLoading(false);
+      return;
+    }
     load();
     const onUpdate = (cfg: IntegracoesConfig) => {
       setConfig(cfg);
@@ -91,7 +98,7 @@ export function useIntegracoesConfig() {
     return () => {
       listeners = listeners.filter((fn) => fn !== onUpdate);
     };
-  }, [load]);
+  }, [load, dbUser]);
 
   return { config, loading };
 }

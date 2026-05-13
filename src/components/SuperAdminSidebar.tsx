@@ -10,6 +10,7 @@ import {
   Package,
   Headphones,
   Puzzle,
+  Shield,
 } from "lucide-react";
 import { SupportDialog } from "@/components/SupportDialog";
 
@@ -19,6 +20,7 @@ const navItems = [
   { icon: CreditCard, label: "Financeiro", path: "/admin/financeiro" },
   { icon: Package, label: "Planos", path: "/admin/planos" },
   { icon: Puzzle, label: "Integrações", path: "/admin/integracoes" },
+  { icon: Shield, label: "Administração", path: "/admin/administradores" },
 ];
 
 export function SuperAdminSidebar() {
