@@ -44,9 +44,16 @@ interface AuthContextType {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   isSubscriptionBlocked: boolean;
+  /** Super admin optou por visualizar as telas da plataforma (fora do backoffice). */
+  platformPreview: boolean;
+  enterPlatformPreview: () => void;
+  exitPlatformPreview: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/** Flag (por aba) que libera o super admin a navegar pela plataforma como um usuário. */
+const PLATFORM_PREVIEW_KEY = "leadradar_admin_platform_preview";
 
 function normalizeUser(raw: any): DbUser | null {
   if (!raw) return null;
@@ -76,9 +83,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [dbUser, setDbUser] = useState<DbUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [platformPreview, setPlatformPreview] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem(PLATFORM_PREVIEW_KEY) === "1";
+  });
 
   const clearPasswordRecovery = useCallback(() => {
     setIsPasswordRecovery(false);
+  }, []);
+
+  const enterPlatformPreview = useCallback(() => {
+    sessionStorage.setItem(PLATFORM_PREVIEW_KEY, "1");
+    setPlatformPreview(true);
+  }, []);
+
+  const exitPlatformPreview = useCallback(() => {
+    sessionStorage.removeItem(PLATFORM_PREVIEW_KEY);
+    setPlatformPreview(false);
   }, []);
 
   const loadProfile = useCallback(async () => {
@@ -134,6 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    sessionStorage.removeItem(PLATFORM_PREVIEW_KEY);
+    setPlatformPreview(false);
     setSession(null);
     setDbUser(null);
   }, []);
@@ -159,6 +182,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: dbUser?.role === "admin" || isSuperAdmin,
     isSuperAdmin,
     isSubscriptionBlocked,
+    platformPreview,
+    enterPlatformPreview,
+    exitPlatformPreview,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

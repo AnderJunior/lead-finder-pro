@@ -11,6 +11,7 @@ import {
   Headphones,
   Puzzle,
   Shield,
+  ExternalLink,
 } from "lucide-react";
 import { SupportDialog } from "@/components/SupportDialog";
 
@@ -24,13 +25,18 @@ const navItems = [
 ];
 
 export function SuperAdminSidebar() {
-  const { signOut, dbUser } = useAuth();
+  const { signOut, dbUser, enterPlatformPreview } = useAuth();
   const navigate = useNavigate();
   const [supportOpen, setSupportOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
     navigate("/login", { replace: true });
+  };
+
+  const handleAcessarPlataforma = () => {
+    enterPlatformPreview();
+    navigate("/", { replace: true });
   };
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -64,6 +70,17 @@ export function SuperAdminSidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Acessar Plataforma */}
+      <div className="px-4 py-3 border-t border-gray-200">
+        <button
+          onClick={handleAcessarPlataforma}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/15 transition-all duration-200"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Acessar Plataforma
+        </button>
+      </div>
 
       {/* Suporte */}
       <div className="px-4 py-3 border-t border-gray-200">

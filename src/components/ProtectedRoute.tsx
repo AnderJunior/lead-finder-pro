@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { session, loading, isSuperAdmin, isPasswordRecovery, isSubscriptionBlocked, dbUser, signOut } = useAuth();
+  const { session, loading, isSuperAdmin, platformPreview, isPasswordRecovery, isSubscriptionBlocked, dbUser, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -32,7 +32,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/reset-password" replace />;
   }
 
-  if (isSuperAdmin) {
+  // Super admin normalmente vive no backoffice (/admin). Só liberamos as telas
+  // da plataforma quando ele optou explicitamente por "Acessar Plataforma".
+  if (isSuperAdmin && !platformPreview) {
     return <Navigate to="/admin" replace />;
   }
 

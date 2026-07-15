@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, LayoutDashboard, Users, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3, Coins } from "lucide-react";
+import { Search, LayoutDashboard, Users, LogOut, Settings, KanbanSquare, CreditCard, Loader2, Compass, ChevronDown, History, Medal, BarChart3, Coins, ArrowLeft } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,10 +26,15 @@ const bottomNavItems = [
 ];
 
 export function AppSidebar() {
-  const { signOut, dbUser } = useAuth();
+  const { signOut, dbUser, isSuperAdmin, exitPlatformPreview } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { credits, totalCredits, loading: creditsLoading } = useSerperCredits();
+
+  const handleVoltarBackoffice = () => {
+    exitPlatformPreview();
+    navigate("/admin", { replace: true });
+  };
 
   const navegacaoActive = navegacaoSubItems.some((s) => s.path === location.pathname);
   const [navegacaoOpen, setNavegacaoOpen] = useState(navegacaoActive);
@@ -120,9 +125,9 @@ export function AppSidebar() {
       </nav>
 
       {/* Créditos Serper */}
-      <div className="px-4 py-3 border-t border-border">
-        <div className="flex items-center gap-2 mb-2">
-          <CreditCard className="h-4 w-4 text-muted-foreground" />
+      <div className="px-4 py-2 border-t border-border">
+        <div className="flex items-center gap-2 mb-1">
+          <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">Créditos para Buscar</span>
         </div>
         {creditsLoading ? (
@@ -139,8 +144,8 @@ export function AppSidebar() {
               const colorBar = pct <= 0.1 ? "[&>div]:bg-red-500" : pct <= 0.3 ? "[&>div]:bg-yellow-500" : "[&>div]:bg-emerald-500";
               return (
                 <>
-                  <div className="flex items-baseline justify-between mb-1.5">
-                    <span className={cn("text-lg font-bold", colorText)}>
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className={cn("text-base font-bold leading-none", colorText)}>
                       {credits.toLocaleString("pt-BR")}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -149,9 +154,9 @@ export function AppSidebar() {
                   </div>
                   <Progress
                     value={pct * 100}
-                    className={cn("h-2", colorBar)}
+                    className={cn("h-1.5", colorBar)}
                   />
-                  <p className="text-[10px] text-muted-foreground mt-1">
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
                     {creditsUsed.toLocaleString("pt-BR")} utilizados
                   </p>
                 </>
@@ -192,6 +197,15 @@ export function AppSidebar() {
               {dbUser?.email || ""}
             </p>
           </div>
+          {isSuperAdmin && (
+            <button
+              onClick={handleVoltarBackoffice}
+              title="Voltar ao Backoffice"
+              className="shrink-0 p-1.5 rounded-md text-primary hover:text-primary hover:bg-primary/10 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
           <button
             onClick={handleLogout}
             title="Sair"
