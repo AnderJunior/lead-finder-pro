@@ -1,5 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
+import type { User } from "@prisma/client";
 import { z, ZodError, type ZodSchema } from "zod";
+import { prisma } from "./prisma.js";
+
+/** Saldo de créditos concedido à empresa pessoal do super admin (uso praticamente ilimitado). */
+const SUPER_ADMIN_EMPRESA_CREDITOS = 1_000_000;
 
 /**
  * Garante que o usuário tem empresa_id (não super_admin solto).
@@ -15,8 +20,47 @@ export function getEmpresaScope(req: Request): bigint | null {
   return req.user.empresa_id;
 }
 
-export function requireEmpresa(req: Request, res: Response, next: NextFunction): void {
+/**
+ * Provisiona (sob demanda) uma "empresa pessoal" para o super admin, usando os
+ * dados da própria conta. A partir daí a conta dele funciona como uma empresa
+ * comum na plataforma (funil, leads, etc). Idempotente.
+ */
+export async function ensurePersonalEmpresa(user: User): Promise<bigint> {
+  if (user.empresa_id) return user.empresa_id;
+  const empresa = await prisma.empresa.create({
+    data: {
+      nome: user.nome || user.email,
+      email_comercial: user.email,
+      telefone: user.telefone ?? null,
+      ativo: true,
+      creditos: SUPER_ADMIN_EMPRESA_CREDITOS,
+    },
+  });
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { empresa_id: empresa.id },
+  });
+  user.empresa_id = empresa.id; // reflete na request atual
+  return empresa.id;
+}
+
+export async function requireEmpresa(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   if (req.user?.role === "super_admin") {
+    // Se o super admin não está escopando outra empresa (?empresa_id=),
+    // usa a empresa pessoal dele — criando-a na primeira vez.
+    const scoping = req.query.empresa_id || req.body?.empresa_id;
+    if (!req.user.empresa_id && !scoping) {
+      try {
+        await ensurePersonalEmpresa(req.user);
+      } catch (err) {
+        next(err);
+        return;
+      }
+    }
     next();
     return;
   }
