@@ -3,9 +3,6 @@ import type { User } from "@prisma/client";
 import { z, ZodError, type ZodSchema } from "zod";
 import { prisma } from "./prisma.js";
 
-/** Saldo de créditos concedido à empresa pessoal do super admin (uso praticamente ilimitado). */
-const SUPER_ADMIN_EMPRESA_CREDITOS = 1_000_000;
-
 /**
  * Garante que o usuário tem empresa_id (não super_admin solto).
  * Super admin pode passar ?empresa_id=X para escopar a query.
@@ -27,21 +24,29 @@ export function getEmpresaScope(req: Request): bigint | null {
  */
 export async function ensurePersonalEmpresa(user: User): Promise<bigint> {
   if (user.empresa_id) return user.empresa_id;
-  const empresa = await prisma.empresa.create({
-    data: {
-      nome: user.nome || user.email,
-      email_comercial: user.email,
-      telefone: user.telefone ?? null,
-      ativo: true,
-      creditos: SUPER_ADMIN_EMPRESA_CREDITOS,
-    },
+  const empresaId = await prisma.$transaction(async (tx) => {
+    // Trava a linha do usuário para serializar provisionamentos concorrentes
+    // (o front dispara vários requests no load) e evitar empresas duplicadas.
+    await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
+    const fresh = await tx.user.findUnique({
+      where: { id: user.id },
+      select: { empresa_id: true },
+    });
+    if (fresh?.empresa_id) return fresh.empresa_id;
+    const empresa = await tx.empresa.create({
+      data: {
+        nome: user.nome || user.email,
+        email_comercial: user.email,
+        telefone: user.telefone ?? null,
+        ativo: true,
+        // Super admin não usa créditos internos (o limite real é o saldo Serper).
+      },
+    });
+    await tx.user.update({ where: { id: user.id }, data: { empresa_id: empresa.id } });
+    return empresa.id;
   });
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { empresa_id: empresa.id },
-  });
-  user.empresa_id = empresa.id; // reflete na request atual
-  return empresa.id;
+  user.empresa_id = empresaId; // reflete na request atual
+  return empresaId;
 }
 
 export async function requireEmpresa(

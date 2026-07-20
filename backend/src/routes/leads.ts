@@ -138,7 +138,7 @@ router.post(
     }
 
     // Cada lead captado consome 1 crédito
-    await debitCredits(empresaId, 1);
+    await debitCredits(empresaId, 1, { role: req.user!.role });
 
     const lead = await prisma.lead.create({
       data: {
@@ -188,7 +188,7 @@ router.post(
     }
 
     // 2) Debita créditos (somente após validação do funil)
-    await debitCredits(empresaId, data.leads.length);
+    await debitCredits(empresaId, data.leads.length, { role: req.user!.role });
 
     const inserted = await prisma.lead.createManyAndReturn({
       data: data.leads.map((l, i) => ({
@@ -263,7 +263,7 @@ router.post(
     if (!data) return;
 
     // Enriquecimento custa 2 créditos
-    await debitCredits(req.user!.empresa_id, 2);
+    await debitCredits(req.user!.empresa_id, 2, { role: req.user!.role });
 
     const updated = await prisma.lead.update({
       where: { id },

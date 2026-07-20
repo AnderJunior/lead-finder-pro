@@ -8,16 +8,20 @@ interface CreditsData {
   totalCredits: number;
   loading: boolean;
   error: string | null;
+  /** true quando o valor exibido é o saldo real da conta Serper (super admin). */
+  isSerperBalance: boolean;
   refresh: () => Promise<void>;
 }
 
 /**
- * Saldo de créditos da empresa logada (vindo do nosso backend).
- * 1 crédito = 1 busca, 1 lead captado = 1 crédito, enriquecimento = 2 créditos.
+ * Saldo de créditos exibido no sidebar.
+ * - Super admin: puxa o saldo real da conta Serper (GET /api/proxy/serper/account).
+ * - Empresa comum: saldo interno de créditos da empresa (vindo do nosso backend).
+ *   1 crédito = 1 busca, 1 lead captado = 1 crédito, enriquecimento = 2 créditos.
  * Atualiza automaticamente quando `notifyCreditsChanged()` é chamado em qualquer lugar.
  */
 export function useSerperCredits(): CreditsData {
-  const { dbUser } = useAuth();
+  const { dbUser, isSuperAdmin } = useAuth();
   const [credits, setCredits] = useState(0);
   const [totalCredits, setTotalCredits] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -27,6 +31,21 @@ export function useSerperCredits(): CreditsData {
   const empresaId = dbUser?.empresa_id;
 
   const refresh = useCallback(async () => {
+    // Super admin: saldo real da conta Serper, puxado automaticamente.
+    if (isSuperAdmin) {
+      setError(null);
+      try {
+        const acc = await api.get<{ balance: number }>("/api/proxy/serper/account");
+        const bal = acc?.balance ?? 0;
+        setCredits(bal);
+        setTotalCredits(bal);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Erro ao carregar saldo Serper");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     if (!empresaId) {
       setLoading(false);
       return;
@@ -56,7 +75,7 @@ export function useSerperCredits(): CreditsData {
     } finally {
       setLoading(false);
     }
-  }, [empresaId]);
+  }, [empresaId, isSuperAdmin]);
 
   // Carga inicial
   useEffect(() => {
@@ -73,5 +92,5 @@ export function useSerperCredits(): CreditsData {
     return unsubscribe;
   }, [refresh]);
 
-  return { credits, totalCredits, loading, error, refresh };
+  return { credits, totalCredits, loading, error, isSerperBalance: isSuperAdmin, refresh };
 }

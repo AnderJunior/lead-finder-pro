@@ -29,7 +29,7 @@ export function AppSidebar() {
   const { signOut, dbUser, isSuperAdmin, exitPlatformPreview } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { credits, totalCredits, loading: creditsLoading } = useSerperCredits();
+  const { credits, totalCredits, loading: creditsLoading, isSerperBalance } = useSerperCredits();
 
   const handleVoltarBackoffice = () => {
     exitPlatformPreview();
@@ -124,17 +124,35 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      {/* Créditos Serper */}
+      {/* Créditos para Buscar */}
       <div className="px-4 py-2 border-t border-border">
         <div className="flex items-center gap-2 mb-1">
           <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Créditos para Buscar</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            {isSerperBalance ? "Créditos Serper" : "Créditos para Buscar"}
+          </span>
         </div>
         {creditsLoading ? (
           <div className="flex items-center gap-2">
             <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Carregando...</span>
           </div>
+        ) : isSerperBalance ? (
+          /* Super admin: saldo real da conta Serper (puxado automaticamente) */
+          <>
+            {(() => {
+              const colorText =
+                credits <= 50 ? "text-red-500" : credits <= 200 ? "text-yellow-500" : "text-emerald-500";
+              return (
+                <>
+                  <span className={cn("text-lg font-bold leading-none", colorText)}>
+                    {credits.toLocaleString("pt-BR")}
+                  </span>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">saldo real da conta Serper</p>
+                </>
+              );
+            })()}
+          </>
         ) : (
           <>
             {(() => {

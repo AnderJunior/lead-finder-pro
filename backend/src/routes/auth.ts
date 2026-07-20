@@ -11,6 +11,7 @@ import {
 } from "../lib/auth.js";
 import { authenticate } from "../middlewares/auth.js";
 import { publicUser } from "../lib/serialize.js";
+import { ensurePersonalEmpresa } from "../lib/helpers.js";
 
 const router = Router();
 
@@ -56,6 +57,11 @@ router.post("/logout", authenticate, async (req, res) => {
 });
 
 router.get("/me", authenticate, async (req, res) => {
+  // Super admin usa a própria conta como empresa: garante a empresa pessoal já
+  // aqui, para que empresa_id/créditos apareçam assim que o app carrega.
+  if (req.user!.role === "super_admin" && !req.user!.empresa_id) {
+    await ensurePersonalEmpresa(req.user!);
+  }
   const userWithEmpresa = await prisma.user.findUnique({
     where: { id: req.user!.id },
     include: {

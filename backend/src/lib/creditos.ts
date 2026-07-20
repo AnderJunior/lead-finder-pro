@@ -11,10 +11,15 @@ export class InsufficientCreditsError extends Error {
 /**
  * Debita créditos da empresa.
  * Lança InsufficientCreditsError se não houver saldo.
- * Super admin (sem empresa_id) não consome créditos.
+ * Super admin não consome créditos internos (o limite real dele é o saldo Serper).
  */
-export async function debitCredits(empresaId: bigint | null | undefined, amount: number): Promise<void> {
+export async function debitCredits(
+  empresaId: bigint | null | undefined,
+  amount: number,
+  opts?: { role?: string | null }
+): Promise<void> {
   if (!empresaId || amount <= 0) return;
+  if (opts?.role === "super_admin") return;
 
   // Operação atômica: only update if creditos >= amount
   const result = await prisma.empresa.updateMany({

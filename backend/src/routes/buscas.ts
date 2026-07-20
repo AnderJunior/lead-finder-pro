@@ -62,7 +62,7 @@ router.post(
     const data = parseBody(createSchema, req, res);
     if (!data) return;
     // Cada busca consome 1 crédito (super admin não consome)
-    await debitCredits(req.user!.empresa_id, 1);
+    await debitCredits(req.user!.empresa_id, 1, { role: req.user!.role });
     const busca = await prisma.buscaRealizada.create({
       data: {
         ...data,
