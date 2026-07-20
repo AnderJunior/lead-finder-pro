@@ -1639,13 +1639,17 @@ const Funil = () => {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    {e.ordem !== 0 && (
+                    {(e.ordem !== 0 || etapas.length === 1) && (
                       <button
                         type="button"
                         data-no-drag
                         onClick={() => setEtapaExcluirConfirm(e)}
                         className="p-1.5 rounded hover:bg-muted text-destructive hover:text-destructive"
-                        title="Excluir etapa (leads irão para etapa ordem 0)"
+                        title={
+                          etapas.length === 1
+                            ? "Excluir etapa (funil ficará sem etapas)"
+                            : "Excluir etapa (leads irão para etapa ordem 0)"
+                        }
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -1737,8 +1741,17 @@ const Funil = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir etapa</AlertDialogTitle>
             <AlertDialogDescription>
-              Todos os leads que estão na etapa &quot;{etapaExcluirConfirm?.nome}&quot; serão
-              movidos para a etapa de ordem 0 (Novo Lead). Deseja continuar?
+              {etapas.length === 1 ? (
+                <>
+                  A etapa &quot;{etapaExcluirConfirm?.nome}&quot; será excluída e o funil ficará
+                  sem etapas (não configurado). Deseja continuar?
+                </>
+              ) : (
+                <>
+                  Todos os leads que estão na etapa &quot;{etapaExcluirConfirm?.nome}&quot; serão
+                  movidos para a etapa de ordem 0 (Novo Lead). Deseja continuar?
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
